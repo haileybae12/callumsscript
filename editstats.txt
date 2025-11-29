@@ -1,0 +1,168 @@
+--[[
+    Standalone Script: Humanoid Stats Editor
+    -----------------------------------------
+    DESCRIPTION:
+    Creates a powerful UI to view, edit, and lock humanoid properties and attributes.
+    The editor will open automatically when you run the script.
+
+    FEATURES:
+    - Automatically discovers and lists properties and attributes.
+    - Supports editing both numbers and booleans (true/false).
+    - "Lock" feature forces a value to prevent server-side changes.
+    - "Refresh" and "Unlock All" buttons for enhanced usability.
+    - Draggable window that remembers its position.
+
+    CHAT COMMANDS:
+    /stats       - Toggles the editor window on or off.
+    /editstats   - Also toggles the editor window.
+]]
+
+--======================================================================================
+-- Services & State Management
+--======================================================================================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- This table manages the script's entire state
+local State = {
+    UI = nil,
+    ActiveOverrides = {},
+    HeartbeatConnection = nil
+}
+
+--======================================================================================
+-- Core Logic
+--======================================================================================
+
+-- Forward-declare UI creation function
+local createUI
+
+-- The core bypass function that forces locked properties/attributes every frame
+local function forceProperties()
+    if not next(State.ActiveOverrides) then
+        if State.HeartbeatConnection then
+            State.HeartbeatConnection:Disconnect()
+            State.HeartbeatConnection = nil
+        end
+        return
+    end
+
+    local character = LocalPlayer.Character
+    if not character then return end
+
+    for name, data in pairs(State.ActiveOverrides) do
+        local targetObject = data.IsAttribute and data.ParentObject or character:FindFirstChildOfClass("Humanoid")
+        if not targetObject or not targetObject.Parent then return end
+
+        if data.IsAttribute then
+            if targetObject:GetAttribute(name) ~= data.Value then
+                targetObject:SetAttribute(name, data.Value)
+            end
+        else
+            if targetObject[name] ~= data.Value then
+                targetObject[name] = data.Value
+            end
+        end
+    end
+end
+
+--======================================================================================
+-- UI Creation & Management
+--======================================================================================
+createUI = function()
+    if State.UI then return end
+
+    local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+    screenGui.Name = "StandaloneHumanoidEditor"
+    screenGui.ResetOnSpawn = false
+    State.UI = screenGui
+
+    local mainFrame = Instance.new("Frame", screenGui)
+    mainFrame.Size = UDim2.new(0, 320, 0, 420); mainFrame.Position = UDim2.new(0.5, -160, 0.5, -210); mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45); mainFrame.Draggable = true; mainFrame.Active = true;
+    local titleLabel = Instance.new("TextLabel", mainFrame)
+    titleLabel.Size = UDim2.new(1, 0, 0, 30); titleLabel.BackgroundColor3 = Color3.fromRGB(25, 25, 35); titleLabel.Text = "Humanoid Editor"; titleLabel.Font = Enum.Font.Code; titleLabel.TextSize = 16; titleLabel.TextColor3 = Color3.fromRGB(220, 220, 255);
+    local propertyList = Instance.new("ScrollingFrame", mainFrame)
+    propertyList.Size = UDim2.new(1, 0, 1, -30); propertyList.Position = UDim2.new(0, 0, 0, 30); propertyList.BackgroundColor3 = Color3.fromRGB(45, 45, 55); propertyList.AutomaticCanvasSize = Enum.AutomaticSize.Y;
+    local listLayout = Instance.new("UIListLayout", propertyList)
+    listLayout.Padding = UDim.new(0, 5); listLayout.SortOrder = Enum.SortOrder.LayoutOrder;
+    
+    local populateProperties -- Forward-declare for button connections
+    
+    local function createNumberStatRow(name, value, isAttribute, parentObject, layoutOrder)
+        local propFrame = Instance.new("Frame", propertyList); propFrame.Name = name .. "Frame"; propFrame.Size = UDim2.new(1, -10, 0, 30); propFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 70); propFrame.LayoutOrder = layoutOrder;
+        local nameLabel = Instance.new("TextLabel", propFrame); nameLabel.Size = UDim2.new(0.4, 0, 1, 0); nameLabel.Text = name; nameLabel.Font = Enum.Font.Code; nameLabel.TextSize = 14; nameLabel.TextColor3 = Color3.fromRGB(220, 220, 220); nameLabel.TextXAlignment = Enum.TextXAlignment.Left;
+        local valueBox = Instance.new("TextBox", propFrame); valueBox.Size = UDim2.new(0.4, 0, 1, 0); valueBox.Position = UDim2.new(0.4, 0, 0, 0); valueBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40); valueBox.Font = Enum.Font.Code; valueBox.TextSize = 14; valueBox.TextColor3 = Color3.fromRGB(255, 255, 255); valueBox.Text = tostring(value);
+        local lockButton = Instance.new("TextButton", propFrame); lockButton.Name = "LockButton"; lockButton.Size = UDim2.new(0.2, 0, 1, 0); lockButton.Position = UDim2.new(0.8, 0, 0, 0); lockButton.BackgroundColor3 = Color3.fromRGB(80, 20, 20); lockButton.Font = Enum.Font.Code; lockButton.TextSize = 14; lockButton.TextColor3 = Color3.fromRGB(255, 255, 255); lockButton.Text = "Lock";
+        lockButton.MouseButton1Click:Connect(function() local numValue = tonumber(valueBox.Text); if not numValue then return end; if State.ActiveOverrides[name] then State.ActiveOverrides[name] = nil; lockButton.BackgroundColor3 = Color3.fromRGB(80, 20, 20); lockButton.Text = "Lock"; else State.ActiveOverrides[name] = { Value = numValue, IsAttribute = isAttribute, ParentObject = parentObject }; lockButton.BackgroundColor3 = Color3.fromRGB(20, 80, 20); lockButton.Text = "Locked"; if not State.HeartbeatConnection then State.HeartbeatConnection = RunService.Heartbeat:Connect(forceProperties) end; end; end)
+        valueBox.FocusLost:Connect(function(enterPressed) if enterPressed then local newValue = tonumber(valueBox.Text); if not newValue then return end; local targetObject = isAttribute and parentObject or parentObject; if not targetObject then return end; if isAttribute then targetObject:SetAttribute(name, newValue) else targetObject[name] = newValue end; if State.ActiveOverrides[name] then State.ActiveOverrides[name].Value = newValue end; valueBox.Text = tostring(isAttribute and targetObject:GetAttribute(name) or targetObject[name]) end end)
+    end
+
+    local function createBooleanStatRow(name, value, isAttribute, parentObject, layoutOrder)
+        local propFrame = Instance.new("Frame", propertyList); propFrame.Name = name .. "Frame"; propFrame.Size = UDim2.new(1, -10, 0, 30); propFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 70); propFrame.LayoutOrder = layoutOrder;
+        local nameLabel = Instance.new("TextLabel", propFrame); nameLabel.Size = UDim2.new(0.4, 0, 1, 0); nameLabel.Text = name; nameLabel.Font = Enum.Font.Code; nameLabel.TextSize = 14; nameLabel.TextColor3 = Color3.fromRGB(220, 220, 220); nameLabel.TextXAlignment = Enum.TextXAlignment.Left;
+        local valueButton = Instance.new("TextButton", propFrame); valueButton.Size = UDim2.new(0.4, 0, 1, 0); valueButton.Position = UDim2.new(0.4, 0, 0, 0); valueButton.BackgroundColor3 = value and Color3.fromRGB(70, 120, 90) or Color3.fromRGB(120, 70, 70); valueButton.Font = Enum.Font.Code; valueButton.TextSize = 14; valueButton.TextColor3 = Color3.fromRGB(255, 255, 255); valueButton.Text = tostring(value);
+        local lockButton = Instance.new("TextButton", propFrame); lockButton.Name = "LockButton"; lockButton.Size = UDim2.new(0.2, 0, 1, 0); lockButton.Position = UDim2.new(0.8, 0, 0, 0); lockButton.BackgroundColor3 = Color3.fromRGB(80, 20, 20); lockButton.Font = Enum.Font.Code; lockButton.TextSize = 14; lockButton.TextColor3 = Color3.fromRGB(255, 255, 255); lockButton.Text = "Lock";
+        local currentValue = value
+        valueButton.MouseButton1Click:Connect(function() currentValue = not currentValue; valueButton.Text = tostring(currentValue); valueButton.BackgroundColor3 = currentValue and Color3.fromRGB(70, 120, 90) or Color3.fromRGB(120, 70, 70); if parentObject then parentObject:SetAttribute(name, currentValue) end; if State.ActiveOverrides[name] then State.ActiveOverrides[name].Value = currentValue end; end)
+        lockButton.MouseButton1Click:Connect(function() if State.ActiveOverrides[name] then State.ActiveOverrides[name] = nil; lockButton.BackgroundColor3 = Color3.fromRGB(80, 20, 20); lockButton.Text = "Lock"; else State.ActiveOverrides[name] = { Value = currentValue, IsAttribute = isAttribute, ParentObject = parentObject }; lockButton.BackgroundColor3 = Color3.fromRGB(20, 80, 20); lockButton.Text = "Locked"; if not State.HeartbeatConnection then State.HeartbeatConnection = RunService.Heartbeat:Connect(forceProperties) end; end; end)
+    end
+    
+    populateProperties = function()
+        local character = LocalPlayer.Character; local humanoid = character and character:FindFirstChildOfClass("Humanoid"); local rootPart = character and character:FindFirstChild("HumanoidRootPart"); if not (character and humanoid) then return end
+        for _, child in ipairs(propertyList:GetChildren()) do if not child:IsA("UIListLayout") then child:Destroy() end end
+        local layoutCounter = 0; local function addHeader(text) layoutCounter = layoutCounter + 1; local h = Instance.new("TextLabel", propertyList); h.Size = UDim2.new(1, -10, 0, 20); h.Text = " -- " .. text .. " -- "; h.TextColor3 = Color3.fromRGB(180, 200, 255); h.Font = Enum.Font.Code; h.BackgroundTransparency = 1; h.LayoutOrder = layoutCounter; return h end
+        addHeader("Properties")
+        for _, propName in ipairs({"WalkSpeed", "JumpPower", "JumpHeight", "HipHeight", "MaxHealth", "Health"}) do layoutCounter = layoutCounter + 1; createNumberStatRow(propName, humanoid[propName], false, humanoid, layoutCounter) end
+        local allAttributes = {}; local function collect(obj) if not obj then return end; for n, v in pairs(obj:GetAttributes()) do if not allAttributes[n] then allAttributes[n] = {Value = v, Parent = obj} end end end
+        collect(character); collect(humanoid); collect(rootPart)
+        local numericAttributes = {}; local booleanAttributes = {}; for n, d in pairs(allAttributes) do if typeof(d.Value) == "number" then numericAttributes[n] = d elseif typeof(d.Value) == "boolean" then booleanAttributes[n] = d end end
+        if next(numericAttributes) then addHeader("Numeric Attributes") end; for n, d in pairs(numericAttributes) do layoutCounter = layoutCounter + 1; createNumberStatRow(n, d.Value, true, d.Parent, layoutCounter) end
+        if next(booleanAttributes) then addHeader("Boolean Attributes") end; for n, d in pairs(booleanAttributes) do layoutCounter = layoutCounter + 1; createBooleanStatRow(n, d.Value, true, d.Parent, layoutCounter) end
+    end
+    
+    local refreshButton = Instance.new("TextButton", titleLabel); refreshButton.Size = UDim2.new(0, 30, 0, 30); refreshButton.Position = UDim2.new(1, -90, 0, 0); refreshButton.BackgroundColor3 = Color3.fromRGB(25, 25, 35); refreshButton.Text = "R"; refreshButton.Font = Enum.Font.Code; refreshButton.TextSize = 16; refreshButton.TextColor3 = Color3.fromRGB(255, 255, 255);
+    refreshButton.MouseButton1Click:Connect(populateProperties)
+    local unlockAllButton = Instance.new("TextButton", titleLabel); unlockAllButton.Size = UDim2.new(0, 30, 0, 30); unlockAllButton.Position = UDim2.new(1, -60, 0, 0); unlockAllButton.BackgroundColor3 = Color3.fromRGB(25, 25, 35); unlockAllButton.Text = "U"; unlockAllButton.Font = Enum.Font.Code; unlockAllButton.TextSize = 16; unlockAllButton.TextColor3 = Color3.fromRGB(255, 255, 255);
+    unlockAllButton.MouseButton1Click:Connect(function() State.ActiveOverrides = {}; for _, frame in ipairs(propertyList:GetChildren()) do local btn = frame:FindFirstChild("LockButton"); if btn then btn.BackgroundColor3 = Color3.fromRGB(80, 20, 20); btn.Text = "Lock" end end; end)
+    local closeButton = Instance.new("TextButton", titleLabel); closeButton.Size = UDim2.new(0, 30, 0, 30); closeButton.Position = UDim2.new(1, -30, 0, 0); closeButton.BackgroundColor3 = Color3.fromRGB(25, 25, 35); closeButton.Text = "X"; closeButton.Font = Enum.Font.Code; closeButton.TextSize = 16; closeButton.TextColor3 = Color3.fromRGB(255, 255, 255);
+    closeButton.MouseButton1Click:Connect(function() screenGui.Enabled = false end)
+    
+    if LocalPlayer.Character then populateProperties() end
+    LocalPlayer.CharacterAdded:Connect(function() task.wait(0.5); populateProperties() end)
+end
+
+--======================================================================================
+-- Activation & Chat Command
+--======================================================================================
+
+-- [NEW] This function *ensures* the UI is open. Used for initial execution.
+local function openUI()
+    if not State.UI then
+        createUI()
+    end
+    State.UI.Enabled = true
+    print("[EditStats] UI Opened.")
+end
+
+-- This function *toggles* the UI. Used for the chat command.
+local function toggleUI()
+    if not State.UI then
+        createUI() -- Create the UI on first toggle if it doesn't exist yet
+        State.UI.Enabled = true -- Ensure it's visible on the very first toggle
+    else
+        State.UI.Enabled = not State.UI.Enabled
+    end
+    print("[EditStats] UI Toggled: " .. (State.UI.Enabled and "Visible" or "Hidden"))
+end
+
+-- Chat command to toggle the script
+LocalPlayer.Chatted:Connect(function(msg)
+    local lowerMsg = msg:lower()
+    if lowerMsg == "/stats" or lowerMsg == "/editstats" then
+        toggleUI()
+    end
+end)
+
+-- Open the UI automatically when the script is first run.
+openUI()

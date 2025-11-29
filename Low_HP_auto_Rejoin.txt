@@ -1,0 +1,28 @@
+local Players=game:GetService("Players")
+local TS=game:GetService("TeleportService")
+local plr=Players.LocalPlayer
+local thresh=15
+local busy=false
+
+local function rejoinIfLow(hum)
+local hp=hum.Health
+if hp>0 and hp<=thresh and not busy then
+busy=true
+TS:TeleportToPlaceInstance(game.PlaceId,game.JobId,plr)
+end
+end
+
+local function setup(char)
+local hum=char:WaitForChild("Humanoid")
+hum.HealthChanged:Connect(function(hp)
+if hp>0 and hp<=thresh and not busy then
+busy=true
+TS:TeleportToPlaceInstance(game.PlaceId,game.JobId,plr)
+end
+end)
+rejoinIfLow(hum)
+end
+
+if plr.Character then setup(plr.Character)end
+plr.CharacterAdded:Connect(setup)
+task.delay(10,function()busy=false end)

@@ -1,0 +1,259 @@
+--[[
+    Script: Master Equipper V29 (Definitive Parser)
+    Architect: Callum
+    Date: 2025-11-29
+    Description:
+    This definitive build corrects the persistent data-type mismatch error by completely
+    re-architecting the 'updateConfigPanel' function. It now correctly parses the game's
+    perk data (an array of tables) by first building a temporary name-to-value map,
+    ensuring only valid numbers are passed to the GUI sliders. This resolves all 'clamp'
+    errors and provides a stable, fully functional user experience.
+--]]
+
+--// --- SERVICES & CORE REFERENCES ---
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local LOCAL_PLAYER = Players.LocalPlayer
+
+--// --- CORRECTED NETWORK POINTERS ---
+local EVENTS_FOLDER = ReplicatedStorage:WaitForChild("events")
+local PRIME_WEAPON_DATA = EVENTS_FOLDER:WaitForChild("rerollItem")
+local EQUIP_ITEM_REMOTE = EVENTS_FOLDER:WaitForChild("equipItem")
+
+--// --- DATA CACHE ---
+local masterWeaponMap = {}
+local availablePerks = {}
+local availableAttributes = {"fireChance", "iceChance", "voidChance", "healingChance", "electricChance", "infernoChance"}
+
+--// --- GUI V29: WEAPON ARCHITECT ---
+local screenGui = Instance.new("ScreenGui"); screenGui.Name = "MasterEquipperGUI_V29"; screenGui.ResetOnSpawn = false; screenGui.Parent = LOCAL_PLAYER:WaitForChild("PlayerGui")
+local mainFrame = Instance.new("Frame"); mainFrame.Size = UDim2.new(0, 700, 0, 500); mainFrame.Position = UDim2.new(0.5, -350, 0.5, -250); mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30); mainFrame.BorderColor3 = Color3.fromRGB(80, 80, 80); mainFrame.Active = true; mainFrame.Draggable = true; mainFrame.Visible = false; mainFrame.Parent = screenGui
+local titleLabel = Instance.new("TextLabel", mainFrame); titleLabel.Size = UDim2.new(1, 0, 0, 30); titleLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40); titleLabel.Text = "Master Equipper V29 (Definitive Parser)"; titleLabel.Font = Enum.Font.SourceSansBold; titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255); titleLabel.TextSize = 18
+
+-- Panels
+local weaponPanel = Instance.new("Frame", mainFrame); weaponPanel.Size = UDim2.new(0, 250, 1, -30); weaponPanel.Position = UDim2.new(0, 0, 0, 30); weaponPanel.BackgroundColor3 = Color3.fromRGB(35, 35, 35); weaponPanel.BorderSizePixel = 0
+local searchBox = Instance.new("TextBox", weaponPanel); searchBox.Size = UDim2.new(1, -10, 0, 30); searchBox.Position = UDim2.new(0, 5, 0, 5); searchBox.PlaceholderText = "Search Weapons..."; searchBox.BackgroundColor3 = Color3.fromRGB(25, 25, 25); searchBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+local weaponList = Instance.new("ScrollingFrame", weaponPanel); weaponList.Size = UDim2.new(1, 0, 1, -40); weaponList.Position = UDim2.new(0, 0, 0, 40); weaponList.BackgroundColor3 = Color3.fromRGB(35, 35, 35); weaponList.ScrollBarThickness = 6
+local weaponListLayout = Instance.new("UIListLayout", weaponList); weaponListLayout.Padding = UDim.new(0, 2); weaponListLayout.SortOrder = Enum.SortOrder.Name
+local configPanel = Instance.new("Frame", mainFrame); configPanel.Size = UDim2.new(1, -260, 1, -40); configPanel.Position = UDim2.new(0, 260, 0, 35); configPanel.BackgroundColor3 = Color3.fromRGB(45, 45, 45); configPanel.BorderSizePixel = 0
+local selectedWeaponLabel = Instance.new("TextLabel", configPanel); selectedWeaponLabel.Size = UDim2.new(1, -10, 0, 30); selectedWeaponLabel.Position = UDim2.new(0, 5, 0, 5); selectedWeaponLabel.Font = Enum.Font.SourceSansBold; selectedWeaponLabel.Text = "Selected: None"; selectedWeaponLabel.TextColor3 = Color3.fromRGB(255, 255, 255); selectedWeaponLabel.TextSize = 18; selectedWeaponLabel.TextXAlignment = Enum.TextXAlignment.Left
+local rarityLabel = Instance.new("TextLabel", configPanel); rarityLabel.Size = UDim2.new(0.5, -10, 0, 20); rarityLabel.Position = UDim2.new(0, 5, 0, 40); rarityLabel.Text = "Rarity:"; rarityLabel.TextColor3 = Color3.fromRGB(200,200,200); rarityLabel.BackgroundTransparency=1; rarityLabel.TextXAlignment = Enum.TextXAlignment.Left
+local levelLabel = Instance.new("TextLabel", configPanel); levelLabel.Size = UDim2.new(0.5, -10, 0, 20); levelLabel.Position = UDim2.new(0.5, 5, 0, 40); levelLabel.Text = "Level:"; levelLabel.TextColor3 = Color3.fromRGB(200,200,200); levelLabel.BackgroundTransparency=1; levelLabel.TextXAlignment = Enum.TextXAlignment.Left
+local levelInput = Instance.new("TextBox", configPanel); levelInput.Size = UDim2.new(0.5, -10, 0, 30); levelInput.Position = UDim2.new(0.5, 5, 0, 60); levelInput.Text = "800"; levelInput.BackgroundColor3 = Color3.fromRGB(30,30,30); levelInput.TextColor3 = Color3.fromRGB(220,220,220)
+local perkList = Instance.new("ScrollingFrame", configPanel); perkList.Size = UDim2.new(0.5, -10, 1, -100); perkList.Position = UDim2.new(0, 5, 0, 100); perkList.BackgroundColor3 = Color3.fromRGB(35,35,35); perkList.ScrollBarThickness = 4
+local perkListLayout = Instance.new("UIListLayout", perkList); perkListLayout.Padding = UDim.new(0, 5)
+local attributeList = Instance.new("ScrollingFrame", configPanel); attributeList.Size = UDim2.new(0.5, -10, 1, -100); attributeList.Position = UDim2.new(0.5, 5, 0, 100); attributeList.BackgroundColor3 = Color3.fromRGB(35,35,35); attributeList.ScrollBarThickness = 4
+local attributeListLayout = Instance.new("UIListLayout", attributeList); attributeListLayout.Padding = UDim.new(0, 5)
+local equipButton = Instance.new("TextButton", mainFrame); equipButton.Name = "EquipButton"; equipButton.Size = UDim2.new(1, -270, 0, 30); equipButton.Position = UDim2.new(0, 260, 1, -35); equipButton.BackgroundColor3 = Color3.fromRGB(83, 12, 255); equipButton.Font = Enum.Font.SourceSansBold; equipButton.Text = "CONSTRUCT & EQUIP"; equipButton.TextColor3 = Color3.fromRGB(255, 255, 255); equipButton.TextSize = 16
+
+--// --- CUSTOM GUI MODULES ---
+local function createDropdown(parent, position, size, options)
+    local selectedValue = options[1]
+    local dropdownFrame = Instance.new("Frame", parent); dropdownFrame.Position = position; dropdownFrame.Size = size; dropdownFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30); dropdownFrame.BorderSizePixel = 1; dropdownFrame.BorderColor3 = Color3.fromRGB(80, 80, 80); dropdownFrame.ZIndex = 3
+    local mainButton = Instance.new("TextButton", dropdownFrame); mainButton.Size = UDim2.new(1, 0, 1, 0); mainButton.Text = ""; mainButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    local mainButtonLabel = Instance.new("TextLabel", mainButton); mainButtonLabel.Size=UDim2.new(1, -5, 1, 0); mainButtonLabel.Position=UDim2.new(0,5,0,0); mainButtonLabel.Text=selectedValue; mainButtonLabel.TextColor3=Color3.fromRGB(220,220,220); mainButtonLabel.Font=Enum.Font.SourceSans; mainButtonLabel.TextSize=14; mainButtonLabel.BackgroundTransparency=1; mainButtonLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local optionsList = Instance.new("ScrollingFrame", dropdownFrame); optionsList.Size = UDim2.new(1, 0, 4, 0); optionsList.Position = UDim2.new(0, 0, 1, 0); optionsList.BackgroundColor3 = Color3.fromRGB(30, 30, 30); optionsList.BorderColor3 = Color3.fromRGB(80, 80, 80); optionsList.ScrollBarThickness = 5; optionsList.Visible = false; optionsList.ZIndex = 4
+    local listLayout = Instance.new("UIListLayout", optionsList); listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    for i, optionName in ipairs(options) do
+        local optionButton = Instance.new("TextButton", optionsList); optionButton.Size = UDim2.new(1, 0, 0, 25); optionButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45); optionButton.TextColor3 = Color3.fromRGB(200, 200, 200); optionButton.Font = Enum.Font.SourceSans; optionButton.TextSize = 14; optionButton.Text = "  " .. optionName; optionButton.LayoutOrder = i; optionButton.TextXAlignment = Enum.TextXAlignment.Left
+        optionButton.MouseButton1Click:Connect(function() selectedValue = optionName; mainButtonLabel.Text = optionName; optionsList.Visible = false end)
+    end
+    mainButton.MouseButton1Click:Connect(function() optionsList.Visible = not optionsList.Visible end)
+    
+    local function setOption(optionName)
+        for _, opt in ipairs(options) do
+            if opt == optionName then
+                selectedValue = optionName
+                mainButtonLabel.Text = optionName
+                break
+            end
+        end
+    end
+    
+    return { 
+        GetSelectedOption = function() return selectedValue end,
+        SetSelectedOption = setOption 
+    }
+end
+
+local function createSlider(parent, name, minValue, maxValue)
+    local sliderData = { Value = 0 }
+    local container = Instance.new("Frame", parent); container.Size = UDim2.new(1, 0, 0, 50); container.BackgroundTransparency = 1; container.LayoutOrder = 1
+    local nameLabel = Instance.new("TextLabel", container); nameLabel.Size = UDim2.new(1, -50, 0, 20); nameLabel.Position = UDim2.new(0, 5, 0, 5); nameLabel.Text = name; nameLabel.TextColor3 = Color3.fromRGB(200,200,200); nameLabel.BackgroundTransparency = 1; nameLabel.TextXAlignment = Enum.TextXAlignment.Left; nameLabel.Font = Enum.Font.SourceSans; nameLabel.TextSize = 14
+    local valueLabel = Instance.new("TextLabel", container); valueLabel.Size = UDim2.new(0, 40, 0, 20); valueLabel.Position = UDim2.new(1, -45, 0, 5); valueLabel.Text = "0"; valueLabel.TextColor3 = Color3.fromRGB(200,200,200); valueLabel.BackgroundTransparency = 1; valueLabel.TextXAlignment = Enum.TextXAlignment.Right; valueLabel.Font = Enum.Font.SourceSans; valueLabel.TextSize = 14
+    local track = Instance.new("Frame", container); track.Size = UDim2.new(1, -10, 0, 6); track.Position = UDim2.new(0, 5, 0, 30); track.BackgroundColor3 = Color3.fromRGB(25, 25, 25); track.BorderSizePixel = 0
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    local handle = Instance.new("TextButton", track); handle.Size = UDim2.new(0, 12, 0, 12); handle.Position = UDim2.new(0, 0, 0.5, 0); handle.AnchorPoint = Vector2.new(0.5, 0.5); handle.BackgroundColor3 = Color3.fromRGB(120, 120, 120); handle.Text = ""; handle.ZIndex = 2
+    Instance.new("UICorner", handle).CornerRadius = UDim.new(1, 0)
+    
+    local isDragging = false
+    handle.MouseButton1Down:Connect(function() isDragging = true end)
+    UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = false end end)
+    
+    local function updateSlider(percentage)
+        handle.Position = UDim2.fromScale(percentage, 0.5)
+        sliderData.Value = math.floor(minValue + (maxValue - minValue) * percentage)
+        valueLabel.Text = tostring(sliderData.Value)
+    end
+    
+    RunService.Heartbeat:Connect(function()
+        if isDragging then
+            local mouseX = UserInputService:GetMouseLocation().X
+            local trackStart = track.AbsolutePosition.X
+            local trackWidth = track.AbsoluteSize.X
+            local percentage = math.clamp((mouseX - trackStart) / trackWidth, 0, 1)
+            updateSlider(percentage)
+        end
+    end)
+    
+    local function setValue(newValue)
+        local clampedValue = math.clamp(newValue, minValue, maxValue)
+        if (maxValue - minValue) == 0 then return end
+        local percentage = (clampedValue - minValue) / (maxValue - minValue)
+        updateSlider(percentage)
+    end
+
+    return { 
+        GetValue = function() return sliderData.Value end,
+        SetValue = setValue
+    }
+end
+
+local rarityDropdown = createDropdown(configPanel, UDim2.new(0, 5, 0, 60), UDim2.new(0.5, -10, 0, 30), {"basic", "standard", "improved", "refined", "advanced", "calibrated", "elite", "masterwork", "ascendant"})
+
+--// --- DYNAMIC GUI & DATA ENGINE ---
+local selectedWeapon = nil
+local perkControls = {}
+local attributeControls = {}
+
+-- [DEFINITIVE FIX] Re-architected to correctly parse the perk data structure.
+local function updateConfigPanel(weaponName)
+    local data = masterWeaponMap[weaponName]
+    if not data then return end
+
+    rarityDropdown:SetSelectedOption(data.rarity or "basic")
+    levelInput.Text = tostring(data.level or 800)
+
+    -- Stage 1: Create a temporary map from the weapon's perk array.
+    local perkValueMap = {}
+    if data.perks and type(data.perks) == "table" then
+        for _, perkData in ipairs(data.perks) do
+            if perkData.name and perkData.value then
+                perkValueMap[perkData.name] = perkData.value
+            end
+        end
+    end
+
+    -- Stage 2: Safely update sliders using the temporary map.
+    for perkName, slider in pairs(perkControls) do
+        local value = perkValueMap[perkName] or 0
+        slider:SetValue(value)
+    end
+
+    local weaponAttributes = data.attributes or {}
+    for attrName, slider in pairs(attributeControls) do
+        slider:SetValue((weaponAttributes[attrName] or 0) * 100)
+    end
+end
+
+local function buildMasterData()
+    local itemData, exaltedData
+    local MODULES_FOLDER = ReplicatedStorage:WaitForChild("modules")
+
+    local success, err = pcall(function() itemData = require(MODULES_FOLDER:WaitForChild("itemData")) end)
+    if not success then warn("Master Equipper ERROR: Failed to load 'itemData'.", err); return false end
+    
+    success, err = pcall(function() exaltedData = require(MODULES_FOLDER:WaitForChild("exaltedWeaponData")) end)
+    if not success then warn("Master Equipper ERROR: Failed to load 'exaltedWeaponData'.", err); return false end
+
+    for name, data in pairs(itemData) do
+        if data.itemType == "weapons" then masterWeaponMap[name] = data end
+    end
+    for _, perk in ipairs(exaltedData.perks) do
+        table.insert(availablePerks, perk.reference)
+    end
+    table.sort(availablePerks)
+    print("--> Master Equipper V29: Database built.")
+    return true
+end
+
+local function populateGui()
+    for _, perkName in ipairs(availablePerks) do
+        perkControls[perkName] = createSlider(perkList, perkName, 0, 100)
+    end
+    for _, attrName in ipairs(availableAttributes) do
+        attributeControls[attrName] = createSlider(attributeList, attrName, 0, 100)
+    end
+    
+    local sortedNames = {}; for name in pairs(masterWeaponMap) do table.insert(sortedNames, name) end; table.sort(sortedNames)
+    for _, name in ipairs(sortedNames) do
+        local btn = Instance.new("TextButton", weaponList); btn.Size=UDim2.new(1,-10,0,25); btn.Text="  "..name; btn.BackgroundColor3=Color3.fromRGB(50,50,50); btn.TextColor3=Color3.fromRGB(220,220,220); btn.TextXAlignment=Enum.TextXAlignment.Left; btn.Font = Enum.Font.SourceSans; btn.TextSize = 14
+        
+        btn.MouseButton1Click:Connect(function() 
+            selectedWeapon = name; 
+            selectedWeaponLabel.Text = "Selected: " .. name
+            updateConfigPanel(name)
+        end)
+    end
+    task.wait(); weaponList.CanvasSize = UDim2.fromOffset(0, weaponListLayout.AbsoluteContentSize.Y)
+    task.wait(); perkList.CanvasSize = UDim2.fromOffset(0, perkListLayout.AbsoluteContentSize.Y)
+    task.wait(); attributeList.CanvasSize = UDim2.fromOffset(0, attributeListLayout.AbsoluteContentSize.Y)
+end
+
+searchBox.FocusLost:Connect(function()
+    local filter = searchBox.Text:lower()
+    for _, btn in ipairs(weaponList:GetChildren()) do
+        if btn:IsA("TextButton") then
+            btn.Visible = filter == "" or btn.Text:lower():find(filter, 1, true)
+        end
+    end
+    task.wait(); weaponList.CanvasSize = UDim2.fromOffset(0, weaponListLayout.AbsoluteContentSize.Y)
+end)
+
+--// --- ATTRIBUTE INJECTION LOGIC ---
+equipButton.MouseButton1Click:Connect(function()
+    if not selectedWeapon then return end
+    local hrp = LOCAL_PLAYER.Character and LOCAL_PLAYER.Character.HumanoidRootPart
+    if not hrp then return end
+
+    local weaponData = {
+        perkData = {},
+        rarity = rarityDropdown:GetSelectedOption(),
+        level = math.clamp(tonumber(levelInput.Text) or 800, 1, 800),
+        attributes = {}
+    }
+
+    for name, slider in pairs(perkControls) do
+        local value = slider:GetValue()
+        if value > 0 then table.insert(weaponData.perkData, {name, value}) end
+    end
+    for name, slider in pairs(attributeControls) do
+        local value = slider:GetValue()
+        if value > 0 then weaponData.attributes[name] = value / 100 end
+    end
+    
+    pcall(function() PRIME_WEAPON_DATA:InvokeServer(selectedWeapon, weaponData, hrp.Position) end)
+    task.wait(0.2)
+    pcall(function() EQUIP_ITEM_REMOTE:InvokeServer(selectedWeapon) end)
+end)
+
+--// --- TOGGLE & INITIALIZE ---
+local guiVisible = false
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if not gpe and input.KeyCode == Enum.KeyCode.RightControl then
+        guiVisible = not guiVisible
+        mainFrame.Visible = guiVisible
+    end
+end)
+
+if buildMasterData() then
+    populateGui()
+    print("--- Master Equipper V29 Initialized ---")
+    print("--> Press [RIGHT CONTROL] to toggle.")
+else
+    print("--- Master Equipper V29 FAILED to Initialize ---")
+    print("--> Check console for errors.")
+end
