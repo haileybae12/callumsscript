@@ -1,5 +1,5 @@
 -- Introduction Splash Screen
-local function showSplashScreen()
+(function()
     local TweenService = game:GetService("TweenService")
     local CoreGui = game:GetService("CoreGui")
     local THEME = {
@@ -33,7 +33,7 @@ local function showSplashScreen()
     icon.BackgroundTransparency = 1
     icon.Image = THEME.IconAssetId
     icon.ImageColor3 = THEME.AccentColor
-    icon.ImageTransparency = 1 -- Start transparent
+    icon.ImageTransparency = 0
     local title = Instance.new("TextLabel", centerFrame)
     title.Size = UDim2.new(1, 0, 0.2, 0)
     title.Position = UDim2.fromScale(0.5, 0.65)
@@ -65,7 +65,7 @@ local function showSplashScreen()
     }
     local fadeOutTweens = {
         TweenService:Create(background, tweenInfoOut, { BackgroundTransparency = 1 }),
-        TweenService:Create(icon, tweenInfoOut, { ImageTransparency = 1 }),
+        TweenService:Create(icon, tweenInfoOut, { ImageTransparency = 0 }),
         TweenService:Create(title, tweenInfoOut, { TextTransparency = 1 }),
         TweenService:Create(subtitle, tweenInfoOut, { TextTransparency = 1 })
     }
@@ -74,9 +74,7 @@ local function showSplashScreen()
     for _, tween in ipairs(fadeOutTweens) do tween:Play() end
     fadeOutTweens[1].Completed:Wait()
     splashGui:Destroy()
-end
-
-showSplashScreen() -- Call the function
+end)()
 
 --// Services
 local Players = game:GetService("Players")
@@ -94,32 +92,7 @@ local CommandInfo = {}
 local Modules = {}
 
 
-local function secureLoadstring(url, notif)
-    DoNotif(notif, 2)
-    
-    -- Step 1: Securely fetch the script source.
-    local success, source = pcall(game.HttpGet, game, url)
-    if not success or not source then
-        warn("SecureLoadstring Error: Failed to HttpGet from URL:", url, "| Error:", tostring(source))
-        DoNotif("Error: Could not download source code.", 4)
-        return
-    end
 
-    -- Step 2: Compile the source code into a function.
-    local scriptFunction, compileError = loadstring(source)
-    if not scriptFunction then
-        warn("SecureLoadstring Error: Failed to compile source from URL:", url, "| Error:", tostring(compileError))
-        DoNotif("Error: The remote script has a syntax error.", 4)
-        return
-    end
-
-    -- Step 3: Securely execute the compiled function.
-    local runSuccess, runtimeError = pcall(scriptFunction)
-    if not runSuccess then
-        warn("SecureLoadstring Error: A runtime error occurred in script from URL:", url, "| Error:", tostring(runtimeError))
-        DoNotif("Error: The remote script failed to execute.", 4)
-    end
-end
 --// Main Functions
 function DoNotif(text, duration)
     pcall(function()
@@ -991,187 +964,6 @@ RegisterCommand({ Name = "noclip", Aliases = {"nc"}, Description = "Allows you t
     Modules.NoClip:Toggle()
 end)
 
-
-
---// Universal Melee Editor Module
-Modules.MeleeEditor = {
-    State = {
-        UI = nil,
-        LiveConfig = nil,
-        BackupConfig = nil,
-        IsInitialized = false
-    }
-}
-
--- Utility function for deep copying tables
-function Modules.MeleeEditor:_deepcopy(original)
-    local copy = {}
-    for key, value in pairs(original) do
-        if type(value) == "table" then
-            copy[key] = self:_deepcopy(value)
-        else
-            copy[key] = value
-        end
-    end
-    return copy
-end
-
-function Modules.MeleeEditor:InitializeAndCreateUI()
-    -- This function will only run once.
-    if self.State.IsInitialized then return true end
-
-    -- Failsafe Check: Ensure we are in the correct game before proceeding.
-    local globalConfigModule = ReplicatedStorage:FindFirstChild("GlobalConfig")
-    if not (globalConfigModule and globalConfigModule:IsA("ModuleScript")) then
-        DoNotif("Melee Editor Error: 'GlobalConfig' module not found.", 5)
-        return false -- Stop initialization
-    end
-
-    -- The Core Exploit: Get direct references to the game's live and backup configs.
-    self.State.LiveConfig = require(globalConfigModule)
-    self.State.BackupConfig = self:_deepcopy(self.State.LiveConfig)
-
-    --// UI Creation (ported directly from the original script)
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "MeleeEditorGUI_Integrated"
-    gui.ResetOnSpawn = false
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-    self.State.UI = gui -- Store the UI in the state
-
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.fromOffset(450, 300)
-    mainFrame.Position = UDim2.fromScale(0.5, 0.5)
-    mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-    mainFrame.Active = true
-    mainFrame.Draggable = true
-    mainFrame.Parent = gui
-    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
-
-    local titleLabel = Instance.new("TextLabel", mainFrame)
-    titleLabel.Size = UDim2.new(1, 0, 0, 30)
-    titleLabel.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
-    titleLabel.Font = Enum.Font.GothamSemibold
-    titleLabel.Text = "Universal Melee Editor"
-    titleLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-
-    local weaponList = Instance.new("ScrollingFrame", mainFrame)
-    weaponList.Size = UDim2.new(0, 150, 1, -40)
-    weaponList.Position = UDim2.fromOffset(10, 35)
-    weaponList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    weaponList.BorderSizePixel = 0
-    weaponList.ScrollBarThickness = 6
-    Instance.new("UIListLayout", weaponList).Padding = UDim.new(0, 5)
-
-    local controlFrame = Instance.new("Frame", mainFrame)
-    controlFrame.Size = UDim2.new(1, -180, 1, -40)
-    controlFrame.Position = UDim2.fromOffset(170, 35)
-    controlFrame.BackgroundTransparency = 1
-
-    local selectedWeaponLabel = Instance.new("TextLabel", controlFrame)
-    selectedWeaponLabel.Size = UDim2.new(1, 0, 0, 25)
-    selectedWeaponLabel.Font = Enum.Font.GothamBold
-    selectedWeaponLabel.Text = "Select a Weapon"
-    selectedWeaponLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    selectedWeaponLabel.BackgroundTransparency = 1
-
-    local damageInput = Instance.new("TextBox", controlFrame)
-    damageInput.Size = UDim2.new(1, 0, 0, 35)
-    damageInput.Position = UDim2.new(0, 0, 0, 50)
-    damageInput.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    damageInput.Font = Enum.Font.Gotham
-    damageInput.PlaceholderText = "Damage (e.g., 5000)"
-    damageInput.TextColor3 = Color3.fromRGB(240, 240, 240)
-    Instance.new("UICorner", damageInput).CornerRadius = UDim.new(0, 6)
-
-    local cooldownInput = Instance.new("TextBox", controlFrame)
-    cooldownInput.Size = UDim2.new(1, 0, 0, 35)
-    cooldownInput.Position = UDim2.new(0, 0, 0, 95)
-    cooldownInput.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    cooldownInput.Font = Enum.Font.Gotham
-    cooldownInput.PlaceholderText = "Cooldown (e.g., 0)"
-    cooldownInput.TextColor3 = Color3.fromRGB(240, 240, 240)
-    Instance.new("UICorner", cooldownInput).CornerRadius = UDim.new(0, 6)
-
-    local applyButton = Instance.new("TextButton", controlFrame)
-    applyButton.Size = UDim2.new(1, 0, 0, 40)
-    applyButton.Position = UDim2.new(0, 0, 0, 150)
-    applyButton.BackgroundColor3 = Color3.fromRGB(80, 100, 255)
-    applyButton.Font = Enum.Font.GothamBold
-    applyButton.Text = "Apply Stats"
-    applyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Instance.new("UICorner", applyButton).CornerRadius = UDim.new(0, 6)
-
-    local restoreButton = Instance.new("TextButton", controlFrame)
-    restoreButton.Size = UDim2.new(1, 0, 0, 30)
-    restoreButton.Position = UDim2.new(0, 0, 0, 200)
-    restoreButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    restoreButton.Font = Enum.Font.Gotham
-    restoreButton.Text = "Restore Originals"
-    restoreButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-    Instance.new("UICorner", restoreButton).CornerRadius = UDim.new(0, 6)
-
-    local selectedWeaponName = nil
-    for weaponName, stats in pairs(self.State.LiveConfig.Melee) do
-        if type(stats) ~= "table" or not stats.Damage then continue end
-        local weaponButton = Instance.new("TextButton", weaponList)
-        weaponButton.Name = weaponName; weaponButton.Size = UDim2.new(1, 0, 0, 30); weaponButton.BackgroundColor3 = Color3.fromRGB(50, 50, 65); weaponButton.TextColor3 = Color3.fromRGB(220, 220, 230); weaponButton.Font = Enum.Font.Code; weaponButton.Text = weaponName
-        Instance.new("UICorner", weaponButton).CornerRadius = UDim.new(0, 4)
-        weaponButton.MouseButton1Click:Connect(function()
-            selectedWeaponName = weaponName
-            selectedWeaponLabel.Text = "Selected: " .. weaponName
-            damageInput.Text = tostring(self.State.LiveConfig.Melee[weaponName].Damage)
-            cooldownInput.Text = tostring(self.State.LiveConfig.Melee[weaponName].Cooldown)
-        end)
-    end
-
-    applyButton.MouseButton1Click:Connect(function()
-        if not selectedWeaponName then return end
-        local newDamage = tonumber(damageInput.Text)
-        local newCooldown = tonumber(cooldownInput.Text)
-        if newDamage then self.State.LiveConfig.Melee[selectedWeaponName].Damage = newDamage end
-        if newCooldown then self.State.LiveConfig.Melee[selectedWeaponName].Cooldown = newCooldown end
-        DoNotif("Applied stats to " .. selectedWeaponName, 2)
-    end)
-
-    restoreButton.MouseButton1Click:Connect(function()
-        self.State.LiveConfig.Melee = self:_deepcopy(self.State.BackupConfig.Melee)
-        if selectedWeaponName then
-            damageInput.Text = tostring(self.State.LiveConfig.Melee[selectedWeaponName].Damage)
-            cooldownInput.Text = tostring(self.State.LiveConfig.Melee[selectedWeaponName].Cooldown)
-        end
-        DoNotif("All melee stats restored to original values.", 3)
-    end)
-    
-    gui.Parent = CoreGui
-    self.State.IsInitialized = true
-    DoNotif("Melee Editor Initialized.", 2)
-    return true
-end
-
-function Modules.MeleeEditor:Toggle()
-    -- Attempt to initialize the UI the first time the command is run.
-    if not self.State.IsInitialized then
-        if not self:InitializeAndCreateUI() then
-            -- If initialization fails (e.g., not in the right game), stop here.
-            return
-        end
-    end
-    -- Toggle the visibility of the already-created UI.
-    self.State.UI.Enabled = not self.State.UI.Enabled
-end
-
--- Register the command in your admin system
-RegisterCommand({
-    Name = "meleeditor",
-    Aliases = {"medit", "weaponeditor"},
-    Description = "Opens a GUI to edit melee weapon stats by poisoning a shared module."
-}, function(args)
-    Modules.MeleeEditor:Toggle()
-end)
-
-
-
 Modules.AnimationFreezer = {
     State = {
         IsEnabled = false,
@@ -1295,174 +1087,65 @@ RegisterCommand({
     Modules.AnimationFreezer:Toggle()
 end)
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
 
-Modules.SuperPush = {
-    State = {
-        IsEnabled = false,
-        Connections = {},
-        Originals = setmetatable({}, {__mode = "k"}) -- Use a weak table for part references
-    },
-    Config = {
-        PUSH_FORCE = 300,   -- The intensity of the velocity spike.
-        DENSITY = 100,      -- How dense/heavy your character becomes. (Default is ~0.7)
-        COOLDOWN = 0.2,     -- Cooldown between pushes in seconds.
-        lastPushTime = 0
-    }
-}
-
--- Create the physical properties object once for efficiency
-local HEAVY_PROPERTIES = PhysicalProperties.new(Modules.SuperPush.Config.DENSITY, 0.5, 0.5)
-
-function Modules.SuperPush:_cleanupCharacter(character)
-    if not character then return end
-
-    -- Disconnect the touch event
-    if self.State.Connections.Touch then
-        self.State.Connections.Touch:Disconnect()
-        self.State.Connections.Touch = nil
-    end
-
-    -- Restore original physical properties
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") and self.State.Originals[part] then
-            part.CustomPhysicalProperties = self.State.Originals[part]
-            self.State.Originals[part] = nil -- Clear the stored value
-        end
-    end
-end
-
-function Modules.SuperPush:_applyToCharacter(character)
-    if not character then return end
-    
-    local hrp = character:WaitForChild("HumanoidRootPart", 5)
-    if not hrp then return end
-
-    -- 1. Apply Heavyweight Properties
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            -- Store the original properties if we haven't already
-            if not self.State.Originals[part] then
-                self.State.Originals[part] = part.CustomPhysicalProperties
-            end
-            part.CustomPhysicalProperties = HEAVY_PROPERTIES
-        end
-    end
-
-    -- 2. Setup Momentum Push Connection
-    self.State.Connections.Touch = hrp.Touched:Connect(function(otherPart)
-        if os.clock() - self.Config.lastPushTime < self.Config.COOLDOWN then return end
-        
-        local targetModel = otherPart:FindFirstAncestorWhichIsA("Model")
-        if not targetModel then return end
-        
-        local targetPlayer = Players:GetPlayerFromCharacter(targetModel)
-        if not targetPlayer or targetPlayer == LocalPlayer then return end
-
-        local direction = hrp.CFrame.LookVector
-        hrp.AssemblyLinearVelocity = direction * self.Config.PUSH_FORCE
-        
-        self.Config.lastPushTime = os.clock()
-
-        task.wait()
-        if hrp and hrp.Parent then
-            hrp.AssemblyLinearVelocity = Vector3.zero
-        end
-    end)
-end
-
-function Modules.SuperPush:Toggle()
-    self.State.IsEnabled = not self.State.IsEnabled
-
-    if self.State.IsEnabled then
-        DoNotif("Super Push Enabled (Force: " .. self.Config.PUSH_FORCE .. ", Density: " .. self.Config.DENSITY .. ")", 3)
-        
-        -- Apply to current character
-        if LocalPlayer.Character then
-            self:_applyToCharacter(LocalPlayer.Character)
-        end
-
-        -- Handle future characters and clean up old ones
-        self.State.Connections.CharacterAdded = LocalPlayer.CharacterAdded:Connect(function(character)
-            self:_applyToCharacter(character)
-        end)
-        self.State.Connections.CharacterRemoving = LocalPlayer.CharacterRemoving:Connect(function(character)
-            self:_cleanupCharacter(character)
-        end)
-    else
-        DoNotif("Super Push Disabled", 2)
-        
-        -- Disconnect character event listeners
-        if self.State.Connections.CharacterAdded then self.State.Connections.CharacterAdded:Disconnect() end
-        if self.State.Connections.CharacterRemoving then self.State.Connections.CharacterRemoving:Disconnect() end
-        table.clear(self.State.Connections)
-
-        -- Clean up effects from the current character
-        if LocalPlayer.Character then
-            self:_cleanupCharacter(LocalPlayer.Character)
-        end
-    end
-end
-
-RegisterCommand({
-    Name = "superpush",
-    Aliases = {"push", "bump", "heavy"},
-    Description = "Increases your mass and adds a velocity push when you bump into players."
-}, function()
-    Modules.SuperPush:Toggle()
-end
-
-
---// DECOMPILER MODULE [XENO COMPATIBLE]
 Modules.Decompiler = { State = { IsInitialized = false } }
 function Modules.Decompiler:Initialize()
     if self.State.IsInitialized then
         return DoNotif("Decompiler is already initialized.", 3)
     end
+
+    -- Environment capability checks
     if not getscriptbytecode then
         return DoNotif("Decompiler Error: 'getscriptbytecode' is not available.", 5)
     end
-    --// [XENO COMPATIBILITY FIX]: Create a universal HTTP function that works on Synapse, Xeno, and others.
-    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
+    local httpRequest = (syn and syn.request) or http_request
     if not httpRequest then
         return DoNotif("Decompiler Error: A compatible HTTP function is required.", 5)
     end
+
     task.spawn(function()
-        local API_URL = "http://api.plusgiant5.com"
-        local last_call_time = 0
-        local function callAPI(endpoint, scriptInstance)
-            local success, bytecode = pcall(getscriptbytecode, scriptInstance)
-            if not success then return DoNotif("Failed to get bytecode: " .. tostring(bytecode), 4) end
-            local time_elapsed = os.clock() - last_call_time
-            if time_elapsed < 0.5 then task.wait(0.5 - time_elapsed) end
-            local reqSuccess, httpResult = pcall(httpRequest, {
-                Url = API_URL .. endpoint, Body = bytecode, Method = "POST",
-                Headers = { ["Content-Type"] = "text/plain" }
-            })
-            last_call_time = os.clock()
-            if not reqSuccess then return DoNotif("HTTP request failed: " .. tostring(httpResult), 5) end
-            if httpResult.StatusCode ~= 200 then return DoNotif("API Error " .. httpResult.StatusCode .. ": " .. httpResult.StatusMessage, 4) end
-            return httpResult.Body
-        end
-        local function decompile_func(scriptInstance)
-            if not (scriptInstance and (scriptInstance:IsA("LocalScript") or scriptInstance:IsA("ModuleScript"))) then
-                warn("Decompile target must be a LocalScript or ModuleScript instance.")
-                return nil
-            end
-            return callAPI("/konstant/decompile", scriptInstance)
-        end
-        local env = getfenv()
-        env.decompile = decompile_func
-        self.State.IsInitialized = true
-        DoNotif("Decompiler initialized.", 4)
-        DoNotif("Use 'decompile(script_instance)' globally.", 6)
-    end)
+    local API_URL = "http://api.plusgiant5.com"
+    local last_call_time = 0
+
+    local function callAPI(endpoint, scriptInstance)
+    local success, bytecode = pcall(getscriptbytecode, scriptInstance)
+    if not success then return DoNotif("Failed to get bytecode: " .. tostring(bytecode), 4) end
+
+    -- Rate limiting
+    local time_elapsed = os.clock() - last_call_time
+    if time_elapsed < 0.5 then task.wait(0.5 - time_elapsed) end
+
+    local reqSuccess, httpResult = pcall(httpRequest, {
+    Url = API_URL .. endpoint, Body = bytecode, Method = "POST",
+    Headers = { ["Content-Type"] = "text/plain" }
+    })
+    last_call_time = os.clock()
+
+    if not reqSuccess then return DoNotif("HTTP request failed: " .. tostring(httpResult), 5) end
+    if httpResult.StatusCode ~= 200 then return DoNotif("API Error " .. httpResult.StatusCode .. ": " .. httpResult.StatusMessage, 4) end
+
+    return httpResult.Body
 end
-RegisterCommand({Name = "decompile", Aliases = {"decomp", "disassemble"}, Description = "Initializes the Konstant decompiler functions."}, function()
-    Modules.Decompiler:Initialize()
+
+local function decompile_func(scriptInstance)
+if not (scriptInstance and (scriptInstance:IsA("LocalScript") or scriptInstance:IsA("ModuleScript"))) then
+    warn("Decompile target must be a LocalScript or ModuleScript instance.")
+    return nil
+end
+return callAPI("/konstant/decompile", scriptInstance)
+end
+
+-- Make the functions globally accessible
+local env = getfenv()
+env.decompile = decompile_func
+self.State.IsInitialized = true
+
+DoNotif("Decompiler initialized.", 4)
+DoNotif("Use 'decompile(script_instance)' globally.", 6)
 end)
+end
+
+RegisterCommand({Name = "decompile", Aliases = {"decomp", "disassemble"}, Description = "Initializes the Konstant decompiler functions."}, function() Modules.Decompiler:Initialize() end)
 
 
 local Players = game:GetService("Players")
@@ -1826,138 +1509,246 @@ Description = "Allows kill bricks to kill you again."
 Modules.killbrick.Disable(args)
 end)
 
---// Tool Modification Commands
+Modules.FlingProtection = {
+    State = {
+        IsEnabled = false,
+        SteppedConnection = nil,
+        PlayerConnections = {} -- Stores connections for PlayerAdded/CharacterAdded
+    },
+    Config = {
+        MAX_VELOCITY_MAGNITUDE = 200,
+        -- Define unique names for our collision groups to avoid conflicts
+        LOCAL_PLAYER_GROUP = "LocalPlayerCollisionGroup",
+        OTHER_PLAYERS_GROUP = "OtherPlayersCollisionGroup"
+    }
+}
 
---// Persistent Reach Module (V2)
+function Modules.FlingProtection:_setCollisionGroupForCharacter(character, groupName)
+    if not character then return end
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            pcall(function() part.CollisionGroup = groupName end)
+        end
+    end
+end
+
+function Modules.FlingProtection:_setupPlayerCollisions()
+    local PhysicsService = game:GetService("PhysicsService")
+
+    -- Create the collision groups, wrapped in pcalls in case they already exist
+    pcall(function() PhysicsService:CreateCollisionGroup(self.Config.LOCAL_PLAYER_GROUP) end)
+    pcall(function() PhysicsService:CreateCollisionGroup(self.Config.OTHER_PLAYERS_GROUP) end)
+
+    -- This is the key: disable collisions between our two new groups
+    PhysicsService:CollisionGroupSetCollidable(self.Config.LOCAL_PLAYER_GROUP, self.Config.OTHER_PLAYERS_GROUP, false)
+
+    -- Handle all players currently in the game
+    for _, player in ipairs(Players:GetPlayers()) do
+        local group = (player == LocalPlayer) and self.Config.LOCAL_PLAYER_GROUP or self.Config.OTHER_PLAYERS_GROUP
+        if player.Character then
+            self:_setCollisionGroupForCharacter(player.Character, group)
+        end
+        -- Listen for when their character respawns
+        local conn = player.CharacterAdded:Connect(function(character)
+            self:_setCollisionGroupForCharacter(character, group)
+        end)
+        table.insert(self.State.PlayerConnections, conn)
+    end
+
+    -- Handle players who join after the script is enabled
+    local conn = Players.PlayerAdded:Connect(function(player)
+        local group = self.Config.OTHER_PLAYERS_GROUP -- New players are always "others"
+        local charConn = player.CharacterAdded:Connect(function(character)
+            self:_setCollisionGroupForCharacter(character, group)
+        end)
+        table.insert(self.State.PlayerConnections, charConn)
+    end)
+    table.insert(self.State.PlayerConnections, conn)
+end
+
+function Modules.FlingProtection:_revertPlayerCollisions()
+    -- Disconnect all event listeners to prevent memory leaks
+    for _, conn in ipairs(self.State.PlayerConnections) do
+        conn:Disconnect()
+    end
+    self.State.PlayerConnections = {}
+
+    -- Reset all players back to the default collision group
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character then
+            self:_setCollisionGroupForCharacter(player.Character, "Default")
+        end
+    end
+end
+
+function Modules.FlingProtection:_enforceStability()
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not (hrp and not hrp.Anchored) then return end
+    if hrp.AssemblyLinearVelocity.Magnitude > self.Config.MAX_VELOCITY_MAGNITUDE then
+        hrp.AssemblyLinearVelocity = Vector3.zero
+    end
+end
+
+function Modules.FlingProtection:Toggle()
+    self.State.IsEnabled = not self.State.IsEnabled
+
+    if self.State.IsEnabled then
+        DoNotif("Fling & Player Collision Protection: ENABLED", 2)
+        self:_setupPlayerCollisions()
+        self.State.SteppedConnection = RunService.Stepped:Connect(function() self:_enforceStability() end)
+    else
+        DoNotif("Fling & Player Collision Protection: DISABLED", 2)
+        self:_revertPlayerCollisions()
+        if self.State.SteppedConnection then
+            self.State.SteppedConnection:Disconnect()
+            self.State.SteppedConnection = nil
+        end
+    end
+end
+
+-- Register the updated command
+RegisterCommand({
+    Name = "antifling",
+    Aliases = {"nofling", "anf"},
+    Description = "Prevents flinging and disables collision with other players."
+}, function()
+    Modules.FlingProtection:Toggle()
+end)
+
+
 Modules.Reach = {
     State = {
-        UI = nil,
-        -- This will store the configuration to be re-applied after death.
-        -- Example: { toolName = "ClassicSword", partName = "Handle", reachType = "box", reachSize = 15 }
-        PersistentConfig = nil
+        UI = nil
     }
 }
 
 function Modules.Reach:_getTool()
-    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-end
-
--- This is the core logic, now in its own function to be called from multiple places.
-function Modules.Reach:_applyReachToPart(part, reachType, size)
-    if not part or not part.Parent then
-        return DoNotif("Target part for reach is invalid.", 3)
+    -- A robust way to find the currently equipped tool, whether in Character or Backpack
+    local character = LocalPlayer.Character
+    if character and character:FindFirstChildOfClass("Tool") then
+        return character:FindFirstChildOfClass("Tool")
     end
-    
-    -- Store the original size if it hasn't been stored already.
-    if not part:FindFirstChild("OGSize") then
-        local originalSize = Instance.new("Vector3Value", part)
-        originalSize.Name = "OGSize"
-        originalSize.Value = part.Size
+    if LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChildOfClass("Tool") then
+        return LocalPlayer.Backpack:FindFirstChildOfClass("Tool")
     end
-    
-    -- Apply the new size.
-    if reachType == "box" then
-        part.Size = Vector3.new(size, size, size)
-    else -- "directional"
-        part.Size = Vector3.new(part.Size.X, part.Size.Y, size)
-    end
-    part.Massless = true -- Important for preventing physics glitches.
-
-    -- Visual indicator
-    if part:FindFirstChild("ReachIndicator") then part.ReachIndicator:Destroy() end
-    local selectionBox = Instance.new("SelectionBox", part)
-    selectionBox.Name = "ReachIndicator"
-    selectionBox.Adornee = part
-    selectionBox.Color3 = Color3.fromRGB(0, 255, 100)
-    selectionBox.LineThickness = 0.02
+    return nil
 end
 
 function Modules.Reach:Apply(reachType, size)
-    if self.State.UI then self.State.UI:Destroy() end
-    
+    local self = self -- FIX: Preserves the 'self' context for the callback function below.
+    -- Clean up any previous UI
+    if self.State.UI then
+        self.State.UI:Destroy()
+    end
     local tool = self:_getTool()
-    if not tool then return DoNotif("No tool equipped to modify.", 3) end
-
+    if not tool then
+        return DoNotif("No tool equipped.", 3)
+    end
     local parts = {}
-    for _, p in ipairs(tool:GetDescendants()) do if p:IsA("BasePart") then table.insert(parts, p) end end
-    if #parts == 0 then return DoNotif("Equipped tool has no modifiable parts.", 3) end
-
+    for _, p in ipairs(tool:GetDescendants()) do
+        if p:IsA("BasePart") then
+            table.insert(parts, p)
+        end
+    end
+    if #parts == 0 then
+        return DoNotif("The equipped tool has no physical parts.", 3)
+    end
     -- Create the part selection UI
-    local ui = Instance.new("ScreenGui", CoreGui); ui.Name = "ReachPartSelector"; self.State.UI = ui
-    local frame = Instance.new("Frame", ui); frame.Size = UDim2.fromOffset(250, 200); frame.Position = UDim2.new(0.5, -125, 0.5, -100); frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45); Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-    local title = Instance.new("TextLabel", frame); title.Size = UDim2.new(1, 0, 0, 30); title.BackgroundTransparency = 1; title.Font = Enum.Font.Code; title.Text = "Select a Part for Reach"; title.TextColor3 = Color3.fromRGB(200, 220, 255)
-    local scroll = Instance.new("ScrollingFrame", frame); scroll.Size = UDim2.new(1, -20, 1, -40); scroll.Position = UDim2.fromOffset(10, 35); scroll.BackgroundTransparency = frame.BackgroundColor3; scroll.BorderSizePixel = 0; scroll.ScrollBarThickness = 6; local layout = Instance.new("UIListLayout", scroll); layout.Padding = UDim.new(0, 5)
-
+    local ui = Instance.new("ScreenGui")
+    ui.Name = "ReachPartSelector"
+    self.State.UI = ui
+    ui.Parent = CoreGui -- Parent it to CoreGui to ensure it's on top
+    local frame = Instance.new("Frame", ui)
+    frame.Size = UDim2.fromOffset(250, 200)
+    frame.Position = UDim2.new(0.5, -125, 0.5, -100)
+    frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+    local title = Instance.new("TextLabel", frame)
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.Code
+    title.Text = "Select a Part to Modify"
+    title.TextColor3 = Color3.fromRGB(200, 220, 255)
+    title.TextSize = 16
+    local scroll = Instance.new("ScrollingFrame", frame)
+    scroll.Size = UDim2.new(1, -20, 1, -40)
+    scroll.Position = UDim2.fromOffset(10, 35)
+    scroll.BackgroundColor3 = frame.BackgroundColor3
+    scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 6
+    local layout = Instance.new("UIListLayout", scroll)
+    layout.Padding = UDim.new(0, 5)
     for _, part in ipairs(parts) do
-        local btn = Instance.new("TextButton", scroll); btn.Size = UDim2.new(1, 0, 0, 30); btn.BackgroundColor3 = Color3.fromRGB(50, 50, 65); btn.TextColor3 = Color3.fromRGB(220, 220, 230); btn.Font = Enum.Font.Code; btn.Text = part.Name; Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        local btn = Instance.new("TextButton", scroll)
+        btn.Size = UDim2.new(1, 0, 0, 30)
+        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+        btn.TextColor3 = Color3.fromRGB(220, 220, 230)
+        btn.Font = Enum.Font.Code
+        btn.Text = part.Name
+        btn.TextSize = 14
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
         btn.MouseButton1Click:Connect(function()
-            self:_applyReachToPart(part, reachType, size)
+            if not part or not part.Parent then
+                ui:Destroy()
+                return DoNotif("Part no longer exists.", 3)
+            end
+            if not part:FindFirstChild("OGSize3") then
+                local v = Instance.new("Vector3Value", part)
+                v.Name = "OGSize3"
+                v.Value = part.Size
+            end
+            if part:FindFirstChild("FunTIMES") then
+               part:FindFirstChild("FunTIMES"):Destroy()
+            end
             
-            -- SAVE the configuration for persistence.
-            self.State.PersistentConfig = {
-                toolName = tool.Name,
-                partName = part.Name,
-                reachType = reachType,
-                reachSize = size
-            }
+            local sb = Instance.new("SelectionBox", part)
+            sb.Adornee = part
+            sb.Name = "FunTIMES"
+            sb.LineThickness = 0.02
+            sb.Color3 = reachType == "box" and Color3.fromRGB(0, 100, 255) or Color3.fromRGB(255, 0, 0)
             
-            DoNotif("Applied " .. reachType .. " reach of " .. size .. " to " .. part.Name, 3)
-            DoNotif("This reach setting will now auto-apply on respawn.", 4)
+            if reachType == "box" then
+                part.Size = Vector3.one * size
+            else -- directional
+                part.Size = Vector3.new(part.Size.X, part.Size.Y, size)
+            end
+            part.Massless = true
+            
             ui:Destroy()
             self.State.UI = nil
+            DoNotif("Applied " .. reachType .. " reach of " .. size .. " to " .. part.Name, 3)
         end)
     end
 end
 
 function Modules.Reach:Reset()
     local tool = self:_getTool()
-    if not tool then return DoNotif("No tool to reset.", 3) end
+    if not tool then
+        return DoNotif("No tool to reset.", 3)
+    end
+
     for _, p in ipairs(tool:GetDescendants()) do
         if p:IsA("BasePart") then
-            if p:FindFirstChild("OGSize") then
-                p.Size = p.OGSize.Value; p.OGSize:Destroy()
+            local originalSize = p:FindFirstChild("OGSize3")
+            if originalSize then
+                p.Size = originalSize.Value
+                originalSize:Destroy()
             end
-            if p:FindFirstChild("ReachIndicator") then p.ReachIndicator:Destroy() end
+
+            local selectionBox = p:FindFirstChild("FunTIMES")
+            if selectionBox then
+                -- FIX 2: Correctly destroy the instance using its variable reference.
+                selectionBox:Destroy()
+            end
         end
     end
-    DoNotif("Tool reach has been reset for the current session.", 3)
+    DoNotif("Tool reach has been reset.", 3)
 end
 
-function Modules.Reach:Clear()
-    self:Reset() -- Also reset the currently held tool.
-    self.State.PersistentConfig = nil
-    DoNotif("Persistent reach setting cleared. Will not re-apply on respawn.", 4)
-end
+RegisterCommand({Name = "reach", Aliases = {"swordreach"}, Description = "Extends sword reach. ;reach [num]"}, function(args) Modules.Reach:Apply("directional", tonumber(args[1]) or 15) end)
+RegisterCommand({Name = "boxreach", Aliases = {}, Description = "Creates a box hitbox. ;boxreach [num]"}, function(args) Modules.Reach:Apply("box", tonumber(args[1]) or 15) end)
+RegisterCommand({Name = "resetreach", Aliases = {"unreach"}, Description = "Resets tool reach to normal."}, function() Modules.Reach:Reset() end)
 
-function Modules.Reach:Initialize()
-    -- This sets up the automatic re-application hook.
-    LocalPlayer.CharacterAdded:Connect(function(character)
-        -- This connection waits for a tool to be added to the new character.
-        character.ChildAdded:Connect(function(child)
-            if child:IsA("Tool") and self.State.PersistentConfig then
-                local config = self.State.PersistentConfig
-                -- Check if the newly added tool is the one we want to modify.
-                if child.Name == config.toolName then
-                    task.wait(0.1) -- Wait a moment for all parts to load inside the tool.
-                    local targetPart = child:FindFirstChild(config.partName, true)
-                    if targetPart and targetPart:IsA("BasePart") then
-                        self:_applyReachToPart(targetPart, config.reachType, config.reachSize)
-                        DoNotif("Persistent reach re-applied to " .. targetPart.Name, 3)
-                    end
-                end
-            end
-        end)
-    end)
-end
-
--- Initialize the persistence system when the script starts.
-Modules.Reach:Initialize()
-
--- Register Commands
-RegisterCommand({Name = "reach", Aliases = {}, Description = "Applies directional reach. ;reach [num]"}, function(args) Modules.Reach:Apply("directional", tonumber(args[1]) or 20) end)
-RegisterCommand({Name = "boxreach", Aliases = {}, Description = "Applies box reach. ;boxreach [num]"}, function(args) Modules.Reach:Apply("box", tonumber(args[1]) or 20) end)
-RegisterCommand({Name = "resetreach", Aliases = {"unreach"}, Description = "Resets reach on the currently held tool."}, function() Modules.Reach:Reset() end)
-RegisterCommand({Name = "clearreach", Aliases = {}, Description = "Clears the saved reach setting to stop it from re-applying."}, function() Modules.Reach:Clear() end)
 RegisterCommand({Name = "goto", Aliases = {}, Description = "Teleports to a player. ;goto [player]"}, function(args)
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -2486,507 +2277,6 @@ RegisterCommand({
     end
 end)
 
-
-Modules.Mimic = {
-    State = {
-        IsEnabled = false,
-        TargetPlayer = nil,
-        Connections = {},
-        --// [CAMERA FIX]: Store original camera properties to restore them perfectly.
-        OriginalCameraState = {}
-    },
-    Config = {
-        OFFSET = CFrame.new(0, 0, 0),
-        --// [CAMERA FIX]: This CFrame determines the camera's position relative to your character.
-        CAMERA_OFFSET = CFrame.new(0, 5, 15) 
-    }
-}
-
-function Modules.Mimic:_findPlayer(query)
-    if not query then return nil end
-    query = query:lower()
-    local partialMatch = nil
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player.Name:lower() == query then
-            return player
-        end
-        if not partialMatch and player.Name:lower():sub(1, #query) == query then
-            partialMatch = player
-        end
-    end
-    return partialMatch
-end
-
-function Modules.Mimic:_cleanupConnections()
-    for _, conn in pairs(self.State.Connections) do
-        conn:Disconnect()
-    end
-    table.clear(self.State.Connections)
-end
-
-function Modules.Mimic:_updatePosition()
-    local ourCharacter = LocalPlayer.Character
-    local targetCharacter = self.State.TargetPlayer and self.State.TargetPlayer.Character
-    local ourHRP = ourCharacter and ourCharacter:FindFirstChild("HumanoidRootPart")
-    local targetHRP = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
-    
-    if not (self.State.IsEnabled and ourHRP and targetHRP and targetHRP.Parent) then
-        self:Toggle(nil)
-        return
-    end
-
-    -- Set character position
-    ourHRP.CFrame = targetHRP.CFrame * self.Config.OFFSET
-    
-    --// [CAMERA FIX]: Manually update the camera's CFrame every frame.
-    local camera = Workspace.CurrentCamera
-    camera.CFrame = ourHRP.CFrame * self.Config.CAMERA_OFFSET
-end
-
-function Modules.Mimic:_watchTarget(targetPlayer)
-    local function onCharacterAdded(character)
-        if self.State.Connections.StateConnection then
-            self.State.Connections.StateConnection:Disconnect()
-        end
-        local targetHumanoid = character:WaitForChild("Humanoid", 5)
-        if targetHumanoid then
-            self.State.Connections.StateConnection = targetHumanoid.StateChanged:Connect(function(old, new)
-                local ourHumanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                if ourHumanoid and new == Enum.HumanoidStateType.Jumping then
-                    ourHumanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                end
-            end)
-        end
-    end
-
-    if targetPlayer.Character then
-        onCharacterAdded(targetPlayer.Character)
-    end
-    self.State.Connections.CharacterAdded = targetPlayer.CharacterAdded:Connect(onCharacterAdded)
-end
-
-function Modules.Mimic:Toggle(targetPlayer)
-    local camera = Workspace.CurrentCamera
-
-    if self.State.IsEnabled then
-        self.State.IsEnabled = false
-        self.State.TargetPlayer = nil
-        self:_cleanupConnections()
-        
-        local ourHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if ourHRP then
-            ourHRP.Anchored = false
-        end
-
-        --// [CAMERA FIX]: Restore the original camera state.
-        if self.State.OriginalCameraState.Type then
-            camera.CameraType = self.State.OriginalCameraState.Type
-        end
-        if self.State.OriginalCameraState.Subject then
-            camera.CameraSubject = self.State.OriginalCameraState.Subject
-        end
-        table.clear(self.State.OriginalCameraState)
-        
-        DoNotif("Mimic Disabled", 2)
-        return
-    end
-
-    if not targetPlayer then return end
-
-    local ourCharacter = LocalPlayer.Character
-    local ourHumanoid = ourCharacter and ourCharacter:FindFirstChildOfClass("Humanoid")
-    local ourHRP = ourCharacter and ourCharacter:FindFirstChild("HumanoidRootPart")
-
-    if not (ourHumanoid and ourHRP) then
-        DoNotif("Error: Your character is not properly loaded.", 4)
-        return
-    end
-
-    self.State.IsEnabled = true
-    self.State.TargetPlayer = targetPlayer
-    ourHRP.Anchored = true
-    
-    --// [CAMERA FIX]: Save current camera state and switch to scriptable.
-    self.State.OriginalCameraState = { Type = camera.CameraType, Subject = camera.CameraSubject }
-    camera.CameraType = Enum.CameraMode.Scriptable
-
-    self:_watchTarget(targetPlayer)
-    self.State.Connections.Render = RunService.RenderStepped:Connect(function() self:_updatePosition() end)
-    self.State.Connections.Died = ourHumanoid.Died:Connect(function()
-        DoNotif("Mimic disabled due to death.", 3)
-        self:Toggle(nil)
-    end)
-    
-    DoNotif("Mimicking: " .. targetPlayer.Name, 2)
-end
-
-RegisterCommand({
-    Name = "mimic",
-    Aliases = {"attach", "glue"},
-    Description = "Glues you to a target player, mimicking their movements. Usage: ;mimic <player>"
-}, function(args)
-    if #args == 0 then
-        if Modules.Mimic.State.IsEnabled then
-            Modules.Mimic:Toggle(nil)
-        else
-            DoNotif("Usage: ;mimic <player_name>", 3)
-        end
-        return
-    end
-
-    local targetName = table.concat(args, " ")
-    local targetPlayer = Modules.Mimic:_findPlayer(targetName)
-
-    if targetPlayer == LocalPlayer then
-        DoNotif("You cannot mimic yourself.", 3)
-        return
-    end
-
-    if targetPlayer then
-        Modules.Mimic:Toggle(targetPlayer)
-    else
-        DoNotif("Player not found: " .. targetName, 3)
-    end
-end)
-
-
-Modules.SwordBot = {
-    State = {
-        IsEnabled = false, AutoTarget = false, Target = nil, UI = nil,
-        RenderConnection = nil, AutoTargetConnection = nil,
-        ToolConnections = {}, bodyGyro = nil, ReachPart = nil
-    },
-    Config = {
-        GyroP = 50000, GyroD = 1000, AttackDistance = 25, StrafeDistance = 10,
-        AutoTargetSearchRadius = 80, AutoTargetInterval = 0.25,
-        ReachSize = Vector3.new(25, 25, 25)
-    }
-}
-
-function Modules.SwordBot:_cleanup()
-    self.State.IsEnabled = false
-    self.State.AutoTarget = false
-    self.State.Target = nil
-
-    if self.State.RenderConnection then self.State.RenderConnection:Disconnect(); self.State.RenderConnection = nil end
-    if self.State.AutoTargetConnection then task.cancel(self.State.AutoTargetConnection); self.State.AutoTargetConnection = nil end
-    if self.State.bodyGyro and self.State.bodyGyro.Parent then self.State.bodyGyro.Parent = nil end
-    
-    self:_cleanupReach()
-
-    if self.State.UI and self.State.UI.Parent then
-        self.State.UI.ToggleBot.Text = "Enable Bot"
-        self.State.UI.ToggleBot.BackgroundColor3 = Color3.fromRGB(50, 160, 90)
-        self.State.UI.ToggleAuto.Text = "Auto Target [OFF]"
-        self.State.UI.ToggleAuto.BackgroundColor3 = Color3.fromRGB(190, 50, 50)
-        self.State.UI.Target.Text = "Target: None"
-    end
-end
-
---// ... (The rest of the SwordBot functions are identical and correct) ...
---// The original functions _cleanupReach, _scanToolForParts, _applyReach, and _updateLoop are fine.
-
-function Modules.SwordBot:_autoTargetLoop()
-    while self.State.IsEnabled and self.State.AutoTarget do
-        local rootPart = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if rootPart then
-            local closestTarget, minDist = nil, self.Config.AutoTargetSearchRadius
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer then
-                    local targetRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-                    if targetRoot and player.Character.Humanoid.Health > 0 then
-                        local dist = (targetRoot.Position - rootPart.Position).Magnitude
-                        if dist < minDist then
-                            minDist, closestTarget = dist, player.Character
-                        end
-                    end
-                end
-            end
-            self.State.Target = closestTarget
-        end
-        task.wait(self.Config.AutoTargetInterval)
-    end
-end
-
-function Modules.SwordBot:Toggle()
-    if self.State.UI and self.State.UI.Parent then
-        self.State.UI:Destroy()
-        self.State.UI = nil
-        self:_cleanup()
-        for _, conn in ipairs(self.State.ToolConnections) do conn:Disconnect() end
-        table.clear(self.State.ToolConnections)
-        return
-    end
-
-    --// UI Creation (code is unchanged and correct)
-    local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-    screenGui.Name = "SwordBot_Polished"
-    screenGui.ResetOnSpawn = false
-    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-    
-    local mainFrame = Instance.new("Frame", screenGui); mainFrame.Size = UDim2.fromOffset(250, 300); mainFrame.Position = UDim2.fromScale(0.5, 0.5); mainFrame.AnchorPoint = Vector2.new(0.5, 0.5); mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40); mainFrame.BackgroundTransparency = 0.15; Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8); Instance.new("UIStroke", mainFrame).Color = Color3.fromRGB(80, 80, 100)
-    local title = Instance.new("TextLabel", mainFrame); title.Size = UDim2.new(1, 0, 0, 40); title.BackgroundTransparency = 1; title.Font = Enum.Font.GothamSemibold; title.Text = "SwordBot Control"; title.TextColor3 = Color3.fromRGB(255, 255, 255); title.TextSize = 20
-    local toggleBot = Instance.new("TextButton", mainFrame); toggleBot.Size = UDim2.new(1, -20, 0, 35); toggleBot.Position = UDim2.fromOffset(10, 45); toggleBot.BackgroundColor3 = Color3.fromRGB(50, 160, 90); toggleBot.Font = Enum.Font.GothamBold; toggleBot.Text = "Enable Bot"; toggleBot.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", toggleBot).CornerRadius = UDim.new(0, 6)
-    local toggleAuto = Instance.new("TextButton", mainFrame); toggleAuto.Size = UDim2.new(1, -20, 0, 35); toggleAuto.Position = UDim2.fromOffset(10, 85); toggleAuto.BackgroundColor3 = Color3.fromRGB(190, 50, 50); toggleAuto.Font = Enum.Font.GothamBold; toggleAuto.Text = "Auto Target [OFF]"; toggleAuto.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", toggleAuto).CornerRadius = UDim.new(0, 6)
-    local targetLabel = Instance.new("TextLabel", mainFrame); targetLabel.Size = UDim2.new(1, -20, 0, 20); targetLabel.Position = UDim2.fromOffset(10, 125); targetLabel.BackgroundTransparency = 1; targetLabel.Font = Enum.Font.Gotham; targetLabel.Text = "Target: None"; targetLabel.TextColor3 = Color3.new(1,1,1); targetLabel.TextXAlignment = Enum.TextXAlignment.Left
-    local reachTitle = Instance.new("TextLabel", mainFrame); reachTitle.Size = UDim2.new(1, -20, 0, 20); reachTitle.Position = UDim2.fromOffset(10, 155); reachTitle.BackgroundTransparency = 1; reachTitle.Font = Enum.Font.GothamSemibold; reachTitle.Text = "Box Reach Control"; reachTitle.TextColor3 = Color3.new(1,1,1); reachTitle.TextXAlignment = Enum.TextXAlignment.Left
-    local reachPartList = Instance.new("ScrollingFrame", mainFrame); reachPartList.Size = UDim2.new(1, -20, 1, -185); reachPartList.Position = UDim2.fromOffset(10, 180); reachPartList.BackgroundColor3 = Color3.fromRGB(25, 25, 35); reachPartList.BorderSizePixel = 0; reachPartList.ScrollBarThickness = 5; local listLayout = Instance.new("UIListLayout", reachPartList); listLayout.Padding = UDim.new(0, 3)
-    
-    self.State.UI = { Parent = screenGui, ToggleBot = toggleBot, ToggleAuto = toggleAuto, Target = targetLabel }
-    
-    toggleBot.MouseButton1Click:Connect(function()
-        self.State.IsEnabled = not self.State.IsEnabled
-        if self.State.IsEnabled then
-            toggleBot.Text = "Disable Bot"; toggleBot.BackgroundColor3 = Color3.fromRGB(190, 50, 50)
-            self.State.bodyGyro = Instance.new("BodyGyro"); self.State.bodyGyro.D = self.Config.GyroD; self.State.bodyGyro.P = self.Config.GyroP; self.State.bodyGyro.MaxTorque = Vector3.new(4e8, 4e8, 4e8)
-            self.State.RenderConnection = RunService.RenderStepped:Connect(function() self:_updateLoop() end)
-            --// [FIX]: Only start the auto target loop if it's already toggled on.
-            if self.State.AutoTarget and not self.State.AutoTargetConnection then
-                self.State.AutoTargetConnection = task.spawn(function() self:_autoTargetLoop() end)
-            end
-        else
-            self:_cleanup()
-        end
-    end)
-    
-    toggleAuto.MouseButton1Click:Connect(function()
-        self.State.AutoTarget = not self.State.AutoTarget
-        if self.State.AutoTarget then
-            toggleAuto.Text = "Auto Target [ON]"; toggleAuto.BackgroundColor3 = Color3.fromRGB(50, 160, 90)
-            --// [FIX]: Ensure the master switch is on and that a thread isn't already running.
-            if self.State.IsEnabled and not self.State.AutoTargetConnection then
-                self.State.AutoTargetConnection = task.spawn(function() self:_autoTargetLoop() end)
-            end
-        else
-            toggleAuto.Text = "Auto Target [OFF]"; toggleAuto.BackgroundColor3 = Color3.fromRGB(190, 50, 50)
-            if self.State.AutoTargetConnection then task.cancel(self.State.AutoTargetConnection); self.State.AutoTargetConnection = nil end
-            self.State.Target = nil
-        end
-    end)
-    
-    local function onToolChanged()
-        self:_cleanupReach()
-        local character = LocalPlayer.Character
-        local tool = character and character:FindFirstChildOfClass("Tool")
-        self:_scanToolForParts(tool, reachPartList)
-    end
-    
-    table.insert(self.State.ToolConnections, LocalPlayer.Character.ChildAdded:Connect(onToolChanged))
-    table.insert(self.State.ToolConnections, LocalPlayer.Character.ChildRemoved:Connect(onToolChanged))
-    onToolChanged()
-end
-
---// Register command is unchanged.
-RegisterCommand({
-    Name = "swordbot",
-    Aliases = {"killaura", "sfbot"},
-    Description = "Opens a GUI to control a combat bot with integrated box reach."
-}, function()
-    Modules.SwordBot:Toggle()
-end)
-
-
-Modules.EditStats = {
-    State = {
-        UI = nil,
-        ActiveOverrides = {},
-        HeartbeatConnection = nil,
-        IsInitialized = false
-    }
-}
-
-function Modules.EditStats:_forceProperties()
-    -- This core logic is preserved as it's highly effective.
-    if not next(self.State.ActiveOverrides) then
-        if self.State.HeartbeatConnection then
-            self.State.HeartbeatConnection:Disconnect()
-            self.State.HeartbeatConnection = nil
-        end
-        return
-    end
-
-    local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-
-    for name, data in pairs(self.State.ActiveOverrides) do
-        local currentValue = data.IsAttribute and humanoid:GetAttribute(name) or humanoid[name]
-        if currentValue ~= data.Value then
-            if data.IsAttribute then
-                humanoid:SetAttribute(name, data.Value)
-            else
-                humanoid[name] = data.Value
-            end
-        end
-    end
-end
-
-function Modules.EditStats:_createUI()
-    if self.State.IsInitialized then return end
-
-    local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
-    screenGui.Name = "HumanoidEditor_Polished"
-    screenGui.ResetOnSpawn = false
-    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-    self.State.UI = screenGui
-
-    local mainFrame = Instance.new("Frame", screenGui)
-    mainFrame.Size = UDim2.fromOffset(320, 420)
-    mainFrame.Position = UDim2.fromScale(0.5, 0.5)
-    mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    mainFrame.BackgroundTransparency = 0.15
-    mainFrame.ClipsDescendants = true
-    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
-    Instance.new("UIStroke", mainFrame).Color = Color3.fromRGB(80, 80, 100)
-    
-    local gradient = Instance.new("UIGradient")
-    gradient.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 45, 55)), ColorSequenceKeypoint.new(1, Color3.fromRGB(30, 30, 40))})
-    gradient.Parent = mainFrame
-
-    local title = Instance.new("TextLabel", mainFrame)
-    title.Size = UDim2.new(1, 0, 0, 40)
-    title.BackgroundTransparency = 1
-    title.Font = Enum.Font.GothamSemibold
-    title.Text = "Humanoid Editor"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = 20
-
-    local closeButton = Instance.new("TextButton", mainFrame)
-    closeButton.Size = UDim2.fromOffset(25, 25); closeButton.AnchorPoint = Vector2.new(1, 0); closeButton.Position = UDim2.new(1, -10, 0, 10); closeButton.BackgroundTransparency = 1; closeButton.Font = Enum.Font.GothamBold; closeButton.Text = "X"; closeButton.TextColor3 = Color3.fromRGB(255, 255, 255); closeButton.TextSize = 20
-    closeButton.MouseButton1Click:Connect(function() self:Toggle() end)
-
-    local propertyList = Instance.new("ScrollingFrame", mainFrame)
-    propertyList.Size = UDim2.new(1, -20, 1, -50)
-    propertyList.Position = UDim2.fromOffset(10, 40)
-    propertyList.BackgroundTransparency = 1
-    propertyList.BorderSizePixel = 0
-    propertyList.ScrollBarThickness = 5
-    
-    local listLayout = Instance.new("UIListLayout", propertyList)
-    listLayout.Padding = UDim.new(0, 5)
-    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-
-    -- The modern, themed factory for creating a UI row for a stat.
-    local function createStatRow(name, value, isAttribute, layoutOrder)
-        local rowFrame = Instance.new("Frame", propertyList)
-        rowFrame.Size = UDim2.new(1, 0, 0, 35)
-        rowFrame.BackgroundTransparency = 1
-        rowFrame.LayoutOrder = layoutOrder
-
-        local nameLabel = Instance.new("TextLabel", rowFrame)
-        nameLabel.Size = UDim2.new(0.4, -5, 1, 0)
-        nameLabel.Font = Enum.Font.Gotham
-        nameLabel.Text = name
-        nameLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-        nameLabel.BackgroundTransparency = 1
-
-        local valueBox = Instance.new("TextBox", rowFrame)
-        valueBox.Size = UDim2.new(0.3, -5, 1, 0)
-        valueBox.Position = UDim2.new(0.4, 0, 0, 0)
-        valueBox.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-        valueBox.Font = Enum.Font.Gotham
-        valueBox.TextColor3 = Color3.fromRGB(240, 240, 240)
-        valueBox.Text = tostring(value)
-        Instance.new("UICorner", valueBox).CornerRadius = UDim.new(0, 6)
-
-        local lockButton = Instance.new("TextButton", rowFrame)
-        lockButton.Size = UDim2.new(0.3, 0, 1, 0)
-        lockButton.Position = UDim2.new(0.7, 5, 0, 0)
-        lockButton.Font = Enum.Font.GothamBold
-        lockButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        lockButton.Text = "Lock"
-        lockButton.BackgroundColor3 = Color3.fromRGB(190, 50, 50) -- Red = Unlocked
-        Instance.new("UICorner", lockButton).CornerRadius = UDim.new(0, 6)
-
-        lockButton.MouseButton1Click:Connect(function()
-            local numValue = tonumber(valueBox.Text)
-            if not numValue then return end
-
-            if self.State.ActiveOverrides[name] then
-                self.State.ActiveOverrides[name] = nil
-                lockButton.BackgroundColor3 = Color3.fromRGB(190, 50, 50); lockButton.Text = "Lock"
-            else
-                self.State.ActiveOverrides[name] = { Value = numValue, IsAttribute = isAttribute }
-                lockButton.BackgroundColor3 = Color3.fromRGB(50, 160, 90); lockButton.Text = "Locked"
-                if not self.State.HeartbeatConnection then
-                    self.State.HeartbeatConnection = RunService.Heartbeat:Connect(function() self:_forceProperties() end)
-                end
-            end
-        end)
-        
-        valueBox.FocusLost:Connect(function(enterPressed)
-            if not enterPressed then return end
-            local newValue = tonumber(valueBox.Text)
-            local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if not (newValue and humanoid) then return end
-            
-            if isAttribute then humanoid:SetAttribute(name, newValue) else humanoid[name] = newValue end
-            if self.State.ActiveOverrides[name] then self.State.ActiveOverrides[name].Value = newValue end
-        end)
-    end
-
-    local function populateProperties()
-        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if not humanoid then return end
-        
-        for _, child in ipairs(propertyList:GetChildren()) do if not child:IsA("UIListLayout") then child:Destroy() end end
-        
-        local layoutCounter = 1
-        local propertiesToEdit = {"WalkSpeed", "JumpPower", "JumpHeight", "HipHeight", "MaxHealth", "Health"}
-        
-        for _, propName in ipairs(propertiesToEdit) do
-            createStatRow(propName, humanoid[propName], false, layoutCounter)
-            layoutCounter = layoutCounter + 1
-        end
-
-        for attrName, attrValue in pairs(humanoid:GetAttributes()) do
-            if typeof(attrValue) == "number" then
-                createStatRow(attrName, attrValue, true, layoutCounter)
-                layoutCounter = layoutCounter + 1
-            end
-        end
-    end
-    
-    -- Superior Dragging Logic
-    title.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local dragStart, startPos = input.Position, mainFrame.Position
-            local moveConn, endConn
-            moveConn = UserInputService.InputChanged:Connect(function(moveInput)
-                if moveInput.UserInputType == Enum.UserInputType.MouseMovement then
-                    local delta = moveInput.Position - dragStart
-                    mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-                end
-            end)
-            endConn = UserInputService.InputEnded:Connect(function(endInput)
-                if endInput.UserInputType == Enum.UserInputType.MouseButton1 then moveConn:Disconnect(); endConn:Disconnect() end
-            end)
-        end
-    end)
-    
-    if LocalPlayer.Character then populateProperties() end
-    LocalPlayer.CharacterAdded:Connect(function() task.wait(0.5); populateProperties() end)
-
-    self.State.IsInitialized = true
-end
-
-function Modules.EditStats:Toggle()
-    if not self.State.IsInitialized then
-        self:_createUI()
-    end
-    self.State.UI.Enabled = not self.State.UI.Enabled
-end
-
-RegisterCommand({
-    Name = "editstats",
-    Aliases = {"stats", "humanoideditor", "prop"},
-    Description = "Opens a properties window to edit and lock Humanoid stats."
-}, function(args)
-    Modules.EditStats:Toggle()
-end)
-
-
 --// Zombie Zone Force Equip Module
 Modules.ZombieZoneEquipper = {
     State = {
@@ -3076,174 +2366,127 @@ RegisterCommand({
         DoNotif("Try: Nyx Echo, Revenant-45, or Nekomancer Staff", 5)
         return
     end
-    
-    -- Join all arguments to handle item names with spaces
-    local fullItemName = table.concat(args, " ")
+        local fullItemName = table.concat(args, " ")
     Modules.ZombieZoneEquipper:Execute(fullItemName)
 end)
 
-Modules.FlingProtection = {
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+Modules.SuperPush = {
     State = {
         IsEnabled = false,
-        SteppedConnection = nil,
-        PlayerConnections = {} -- Stores connections for PlayerAdded/CharacterAdded
+        Connections = {},
+        Originals = setmetatable({}, {__mode = "k"}) -- Use a weak table for part references
     },
     Config = {
-        MAX_VELOCITY_MAGNITUDE = 200,
-        -- Define unique names for our collision groups to avoid conflicts
-        LOCAL_PLAYER_GROUP = "LocalPlayerCollisionGroup",
-        OTHER_PLAYERS_GROUP = "OtherPlayersCollisionGroup"
+        PUSH_FORCE = 300,   -- The intensity of the velocity spike.
+        DENSITY = 100,      -- How dense/heavy your character becomes. (Default is ~0.7)
+        COOLDOWN = 0.2,     -- Cooldown between pushes in seconds.
+        lastPushTime = 0
     }
 }
 
-function Modules.FlingProtection:_setCollisionGroupForCharacter(character, groupName)
+-- Create the physical properties object once for efficiency
+local HEAVY_PROPERTIES = PhysicalProperties.new(Modules.SuperPush.Config.DENSITY, 0.5, 0.5)
+
+function Modules.SuperPush:_cleanupCharacter(character)
     if not character then return end
+
+    -- Disconnect the touch event
+    if self.State.Connections.Touch then
+        self.State.Connections.Touch:Disconnect()
+        self.State.Connections.Touch = nil
+    end
+
+    -- Restore original physical properties
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and self.State.Originals[part] then
+            part.CustomPhysicalProperties = self.State.Originals[part]
+            self.State.Originals[part] = nil -- Clear the stored value
+        end
+    end
+end
+
+function Modules.SuperPush:_applyToCharacter(character)
+    if not character then return end
+    
+    local hrp = character:WaitForChild("HumanoidRootPart", 5)
+    if not hrp then return end
+
+    -- 1. Apply Heavyweight Properties
     for _, part in ipairs(character:GetDescendants()) do
         if part:IsA("BasePart") then
-            pcall(function() part.CollisionGroup = groupName end)
-        end
-    end
-end
-
-function Modules.FlingProtection:_setupPlayerCollisions()
-    local PhysicsService = game:GetService("PhysicsService")
-
-    -- Create the collision groups, wrapped in pcalls in case they already exist
-    pcall(function() PhysicsService:CreateCollisionGroup(self.Config.LOCAL_PLAYER_GROUP) end)
-    pcall(function() PhysicsService:CreateCollisionGroup(self.Config.OTHER_PLAYERS_GROUP) end)
-
-    -- This is the key: disable collisions between our two new groups
-    PhysicsService:CollisionGroupSetCollidable(self.Config.LOCAL_PLAYER_GROUP, self.Config.OTHER_PLAYERS_GROUP, false)
-
-    -- Handle all players currently in the game
-    for _, player in ipairs(Players:GetPlayers()) do
-        local group = (player == LocalPlayer) and self.Config.LOCAL_PLAYER_GROUP or self.Config.OTHER_PLAYERS_GROUP
-        if player.Character then
-            self:_setCollisionGroupForCharacter(player.Character, group)
-        end
-        -- Listen for when their character respawns
-        local conn = player.CharacterAdded:Connect(function(character)
-            self:_setCollisionGroupForCharacter(character, group)
-        end)
-        table.insert(self.State.PlayerConnections, conn)
-    end
-
-    -- Handle players who join after the script is enabled
-    local conn = Players.PlayerAdded:Connect(function(player)
-        local group = self.Config.OTHER_PLAYERS_GROUP -- New players are always "others"
-        local charConn = player.CharacterAdded:Connect(function(character)
-            self:_setCollisionGroupForCharacter(character, group)
-        end)
-        table.insert(self.State.PlayerConnections, charConn)
-    end)
-    table.insert(self.State.PlayerConnections, conn)
-end
-
-function Modules.FlingProtection:_revertPlayerCollisions()
-    -- Disconnect all event listeners to prevent memory leaks
-    for _, conn in ipairs(self.State.PlayerConnections) do
-        conn:Disconnect()
-    end
-    self.State.PlayerConnections = {}
-
-    -- Reset all players back to the default collision group
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player.Character then
-            self:_setCollisionGroupForCharacter(player.Character, "Default")
-        end
-    end
-end
-
-function Modules.FlingProtection:_enforceStability()
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not (hrp and not hrp.Anchored) then return end
-    if hrp.AssemblyLinearVelocity.Magnitude > self.Config.MAX_VELOCITY_MAGNITUDE then
-        hrp.AssemblyLinearVelocity = Vector3.zero
-    end
-end
-
-function Modules.FlingProtection:Toggle()
-    self.State.IsEnabled = not self.State.IsEnabled
-
-    if self.State.IsEnabled then
-        DoNotif("Fling & Player Collision Protection: ENABLED", 2)
-        self:_setupPlayerCollisions()
-        self.State.SteppedConnection = RunService.Stepped:Connect(function() self:_enforceStability() end)
-    else
-        DoNotif("Fling & Player Collision Protection: DISABLED", 2)
-        self:_revertPlayerCollisions()
-        if self.State.SteppedConnection then
-            self.State.SteppedConnection:Disconnect()
-            self.State.SteppedConnection = nil
-        end
-    end
-end
-
--- Register the updated command
-RegisterCommand({
-    Name = "antifling",
-    Aliases = {"nofling", "ghost"},
-    Description = "Prevents flinging and disables collision with other players."
-}, function()
-    Modules.FlingProtection:Toggle()
-end)
-
-
-Modules.CameraFix = {
-    State = {
-        IsEnabled = false,
-        Connection = nil,
-        OriginalMaxZoom = 400,
-        OriginalOcclusionMode = Enum.DevCameraOcclusionMode.Zoom
-    }
-}
-
-function Modules.CameraFix:Toggle()
-    self.State.IsEnabled = not self.State.IsEnabled
-
-    if self.State.IsEnabled then
-        -- Save original settings before applying overrides
-        self.State.OriginalMaxZoom = LocalPlayer.CameraMaxZoomDistance
-        self.State.OriginalOcclusionMode = LocalPlayer.DevCameraOcclusionMode
-        
-        LocalPlayer.CameraMaxZoomDistance = 10000 
-        
-        local success = pcall(function()
-            LocalPlayer.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.None
-        end)
-        if not success then
-            pcall(function() LocalPlayer.DevCameraOcclusionMode = 0 end) -- Fallback for older executors
-        end
-        
-        self.State.Connection = RunService.RenderStepped:Connect(function()
-            if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then
-                LocalPlayer.CameraMode = Enum.CameraMode.Classic
+            -- Store the original properties if we haven't already
+            if not self.State.Originals[part] then
+                self.State.Originals[part] = part.CustomPhysicalProperties
             end
-        end)
-        
-        DoNotif("Camera override enabled (with wall-zoom).", 3)
-    else
-        -- Disable and restore original settings
-        if self.State.Connection then
-            self.State.Connection:Disconnect()
-            self.State.Connection = nil
+            part.CustomPhysicalProperties = HEAVY_PROPERTIES
         end
+    end
+
+    -- 2. Setup Momentum Push Connection
+    self.State.Connections.Touch = hrp.Touched:Connect(function(otherPart)
+        if os.clock() - self.Config.lastPushTime < self.Config.COOLDOWN then return end
         
-        pcall(function()
-            LocalPlayer.DevCameraOcclusionMode = self.State.OriginalOcclusionMode
-            LocalPlayer.CameraMaxZoomDistance = self.State.OriginalMaxZoom
+        local targetModel = otherPart:FindFirstAncestorWhichIsA("Model")
+        if not targetModel then return end
+        
+        local targetPlayer = Players:GetPlayerFromCharacter(targetModel)
+        if not targetPlayer or targetPlayer == LocalPlayer then return end
+
+        local direction = hrp.CFrame.LookVector
+        hrp.AssemblyLinearVelocity = direction * self.Config.PUSH_FORCE
+        
+        self.Config.lastPushTime = os.clock()
+
+        task.wait()
+        if hrp and hrp.Parent then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        end
+    end)
+end
+
+function Modules.SuperPush:Toggle()
+    self.State.IsEnabled = not self.State.IsEnabled
+
+    if self.State.IsEnabled then
+        DoNotif("Super Push Enabled (Force: " .. self.Config.PUSH_FORCE .. ", Density: " .. self.Config.DENSITY .. ")", 3)
+        
+        -- Apply to current character
+        if LocalPlayer.Character then
+            self:_applyToCharacter(LocalPlayer.Character)
+        end
+
+        -- Handle future characters and clean up old ones
+        self.State.Connections.CharacterAdded = LocalPlayer.CharacterAdded:Connect(function(character)
+            self:_applyToCharacter(character)
         end)
+        self.State.Connections.CharacterRemoving = LocalPlayer.CharacterRemoving:Connect(function(character)
+            self:_cleanupCharacter(character)
+        end)
+    else
+        DoNotif("Super Push Disabled", 2)
         
-        DoNotif("Camera override disabled.", 3)
+        -- Disconnect character event listeners
+        if self.State.Connections.CharacterAdded then self.State.Connections.CharacterAdded:Disconnect() end
+        if self.State.Connections.CharacterRemoving then self.State.Connections.CharacterRemoving:Disconnect() end
+        table.clear(self.State.Connections)
+
+        -- Clean up effects from the current character
+        if LocalPlayer.Character then
+            self:_cleanupCharacter(LocalPlayer.Character)
+        end
     end
 end
 
 RegisterCommand({
-    Name = "fixcam",
-    Aliases = {"fix", "unlockcam"},
-    Description = "Unlocks camera, allows zooming through walls, and forces third-person."
+    Name = "superpush",
+    Aliases = {"push", "bump", "heavy"},
+    Description = "Increases your mass and adds a velocity push when you bump into players."
 }, function()
-    Modules.CameraFix:Toggle()
+    Modules.SuperPush:Toggle()
 end)
 
 
@@ -3288,21 +2531,17 @@ RegisterCommand({Name = "stopanimations", Aliases = {"stopa"}, Description = "St
 
 RegisterCommand({Name = "catbypasser", Aliases = {"cat"}, Description = "Loads the Cat Bypasser"}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/lua3/refs/heads/main/CatBypasser(Reborn).lua", "Loading...") end)
 
+RegisterCommand({Name = "stats", Aliases = {}, Description = "Edit and lock your properties."}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/editstats.txt", "Loading Stats..") end)
+
 RegisterCommand({Name = "desync", Aliases = {"invis", "astral"}, Description = "Desyncs local player, making them invisable."}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/astralform.txt", "Leaving Physical Body..") end)
 
-RegisterCommand({Name = "gamingchair", Aliases = {"gc"}, Description = "The best aimbot."}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/gamingchairmain.lua", "Gaming Chair Loaded.") end)
+RegisterCommand({Name = "aimbot", Aliases = {"aim", "a"}, Description = "The best aimbot."}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/gamingchairmain.lua", "Gaming Chair Loaded.") end)
 
 RegisterCommand({Name = "zgui", Aliases = {"upd3", "zui"}, Description = "For Zombie Game upd3"}, function() loadstringCmd("https://raw.githubusercontent.com/zukatechdevelopment-ux/luaprojectse3/refs/heads/main/ZGUI.txt", "Loaded GUI") end)
 
---// [REPLACE WITH THIS]
-RegisterCommand({
-    Name = "reload",
-    Aliases = {"update", "exec"},
-    Description = "Reloads and re-executes the admin script from the GitHub source."
-}, function()
-    secureLoadstring("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/Main.lua", "Reloading admin from source...")
-end)
+RegisterCommand({Name = "swordbot", Aliases = {"sf", "sfbot"}, Description = "Auto Sword Fighter, use E and R"}, function() loadstringCmd("https://raw.githubusercontent.com/bloxtech1/luaprojects2/refs/heads/main/swordnpc", "Bot loaded.") end)
 
+RegisterCommand({Name = "reload", Aliases = {"update", "exec"}, Description = "Reloads and re-executes the admin script from the GitHub source."}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/Main.lua", "Reloading admin from source...") end)
 
 RegisterCommand({ Name = "zoneui", Aliases = {"guns"}, Description = "Loads the Best Gun Giver for Zombie Zone" }, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/ZombieZone.lua", "Loaded") end) 
 
