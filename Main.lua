@@ -1692,139 +1692,136 @@ end)
 
 --// Tool Modification Commands
 
+--// Persistent Reach Module (V2)
 Modules.Reach = {
     State = {
-        UI = nil
+        UI = nil,
+        -- This will store the configuration to be re-applied after death.
+        -- Example: { toolName = "ClassicSword", partName = "Handle", reachType = "box", reachSize = 15 }
+        PersistentConfig = nil
     }
 }
 
 function Modules.Reach:_getTool()
-    -- A robust way to find the currently equipped tool, whether in Character or Backpack
-    local character = LocalPlayer.Character
-    if character and character:FindFirstChildOfClass("Tool") then
-        return character:FindFirstChildOfClass("Tool")
+    return LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+end
+
+-- This is the core logic, now in its own function to be called from multiple places.
+function Modules.Reach:_applyReachToPart(part, reachType, size)
+    if not part or not part.Parent then
+        return DoNotif("Target part for reach is invalid.", 3)
     end
-    if LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChildOfClass("Tool") then
-        return LocalPlayer.Backpack:FindFirstChildOfClass("Tool")
+    
+    -- Store the original size if it hasn't been stored already.
+    if not part:FindFirstChild("OGSize") then
+        local originalSize = Instance.new("Vector3Value", part)
+        originalSize.Name = "OGSize"
+        originalSize.Value = part.Size
     end
-    return nil
+    
+    -- Apply the new size.
+    if reachType == "box" then
+        part.Size = Vector3.new(size, size, size)
+    else -- "directional"
+        part.Size = Vector3.new(part.Size.X, part.Size.Y, size)
+    end
+    part.Massless = true -- Important for preventing physics glitches.
+
+    -- Visual indicator
+    if part:FindFirstChild("ReachIndicator") then part.ReachIndicator:Destroy() end
+    local selectionBox = Instance.new("SelectionBox", part)
+    selectionBox.Name = "ReachIndicator"
+    selectionBox.Adornee = part
+    selectionBox.Color3 = Color3.fromRGB(0, 255, 100)
+    selectionBox.LineThickness = 0.02
 end
 
 function Modules.Reach:Apply(reachType, size)
-    local self = self -- FIX: Preserves the 'self' context for the callback function below.
-    -- Clean up any previous UI
-    if self.State.UI then
-        self.State.UI:Destroy()
-    end
+    if self.State.UI then self.State.UI:Destroy() end
+    
     local tool = self:_getTool()
-    if not tool then
-        return DoNotif("No tool equipped.", 3)
-    end
+    if not tool then return DoNotif("No tool equipped to modify.", 3) end
+
     local parts = {}
-    for _, p in ipairs(tool:GetDescendants()) do
-        if p:IsA("BasePart") then
-            table.insert(parts, p)
-        end
-    end
-    if #parts == 0 then
-        return DoNotif("The equipped tool has no physical parts.", 3)
-    end
+    for _, p in ipairs(tool:GetDescendants()) do if p:IsA("BasePart") then table.insert(parts, p) end end
+    if #parts == 0 then return DoNotif("Equipped tool has no modifiable parts.", 3) end
+
     -- Create the part selection UI
-    local ui = Instance.new("ScreenGui")
-    ui.Name = "ReachPartSelector"
-    self.State.UI = ui
-    ui.Parent = CoreGui -- Parent it to CoreGui to ensure it's on top
-    local frame = Instance.new("Frame", ui)
-    frame.Size = UDim2.fromOffset(250, 200)
-    frame.Position = UDim2.new(0.5, -125, 0.5, -100)
-    frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-    local title = Instance.new("TextLabel", frame)
-    title.Size = UDim2.new(1, 0, 0, 30)
-    title.BackgroundTransparency = 1
-    title.Font = Enum.Font.Code
-    title.Text = "Select a Part to Modify"
-    title.TextColor3 = Color3.fromRGB(200, 220, 255)
-    title.TextSize = 16
-    local scroll = Instance.new("ScrollingFrame", frame)
-    scroll.Size = UDim2.new(1, -20, 1, -40)
-    scroll.Position = UDim2.fromOffset(10, 35)
-    scroll.BackgroundColor3 = frame.BackgroundColor3
-    scroll.BorderSizePixel = 0
-    scroll.ScrollBarThickness = 6
-    local layout = Instance.new("UIListLayout", scroll)
-    layout.Padding = UDim.new(0, 5)
+    local ui = Instance.new("ScreenGui", CoreGui); ui.Name = "ReachPartSelector"; self.State.UI = ui
+    local frame = Instance.new("Frame", ui); frame.Size = UDim2.fromOffset(250, 200); frame.Position = UDim2.new(0.5, -125, 0.5, -100); frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45); Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+    local title = Instance.new("TextLabel", frame); title.Size = UDim2.new(1, 0, 0, 30); title.BackgroundTransparency = 1; title.Font = Enum.Font.Code; title.Text = "Select a Part for Reach"; title.TextColor3 = Color3.fromRGB(200, 220, 255)
+    local scroll = Instance.new("ScrollingFrame", frame); scroll.Size = UDim2.new(1, -20, 1, -40); scroll.Position = UDim2.fromOffset(10, 35); scroll.BackgroundTransparency = frame.BackgroundColor3; scroll.BorderSizePixel = 0; scroll.ScrollBarThickness = 6; local layout = Instance.new("UIListLayout", scroll); layout.Padding = UDim.new(0, 5)
+
     for _, part in ipairs(parts) do
-        local btn = Instance.new("TextButton", scroll)
-        btn.Size = UDim2.new(1, 0, 0, 30)
-        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-        btn.TextColor3 = Color3.fromRGB(220, 220, 230)
-        btn.Font = Enum.Font.Code
-        btn.Text = part.Name
-        btn.TextSize = 14
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        local btn = Instance.new("TextButton", scroll); btn.Size = UDim2.new(1, 0, 0, 30); btn.BackgroundColor3 = Color3.fromRGB(50, 50, 65); btn.TextColor3 = Color3.fromRGB(220, 220, 230); btn.Font = Enum.Font.Code; btn.Text = part.Name; Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
         btn.MouseButton1Click:Connect(function()
-            if not part or not part.Parent then
-                ui:Destroy()
-                return DoNotif("Part no longer exists.", 3)
-            end
-            if not part:FindFirstChild("OGSize3") then
-                local v = Instance.new("Vector3Value", part)
-                v.Name = "OGSize3"
-                v.Value = part.Size
-            end
-            if part:FindFirstChild("FunTIMES") then
-               part:FindFirstChild("FunTIMES"):Destroy()
-            end
+            self:_applyReachToPart(part, reachType, size)
             
-            local sb = Instance.new("SelectionBox", part)
-            sb.Adornee = part
-            sb.Name = "FunTIMES"
-            sb.LineThickness = 0.02
-            sb.Color3 = reachType == "box" and Color3.fromRGB(0, 100, 255) or Color3.fromRGB(255, 0, 0)
+            -- SAVE the configuration for persistence.
+            self.State.PersistentConfig = {
+                toolName = tool.Name,
+                partName = part.Name,
+                reachType = reachType,
+                reachSize = size
+            }
             
-            if reachType == "box" then
-                part.Size = Vector3.one * size
-            else -- directional
-                part.Size = Vector3.new(part.Size.X, part.Size.Y, size)
-            end
-            part.Massless = true
-            
+            DoNotif("Applied " .. reachType .. " reach of " .. size .. " to " .. part.Name, 3)
+            DoNotif("This reach setting will now auto-apply on respawn.", 4)
             ui:Destroy()
             self.State.UI = nil
-            DoNotif("Applied " .. reachType .. " reach of " .. size .. " to " .. part.Name, 3)
         end)
     end
 end
 
 function Modules.Reach:Reset()
     local tool = self:_getTool()
-    if not tool then
-        return DoNotif("No tool to reset.", 3)
-    end
-
+    if not tool then return DoNotif("No tool to reset.", 3) end
     for _, p in ipairs(tool:GetDescendants()) do
         if p:IsA("BasePart") then
-            local originalSize = p:FindFirstChild("OGSize3")
-            if originalSize then
-                p.Size = originalSize.Value
-                originalSize:Destroy()
+            if p:FindFirstChild("OGSize") then
+                p.Size = p.OGSize.Value; p.OGSize:Destroy()
             end
-
-            local selectionBox = p:FindFirstChild("FunTIMES")
-            if selectionBox then
-                -- FIX 2: Correctly destroy the instance using its variable reference.
-                selectionBox:Destroy()
-            end
+            if p:FindFirstChild("ReachIndicator") then p.ReachIndicator:Destroy() end
         end
     end
-    DoNotif("Tool reach has been reset.", 3)
+    DoNotif("Tool reach has been reset for the current session.", 3)
 end
 
-RegisterCommand({Name = "reach", Aliases = {"swordreach"}, Description = "Extends sword reach. ;reach [num]"}, function(args) Modules.Reach:Apply("directional", tonumber(args[1]) or 15) end)
-RegisterCommand({Name = "boxreach", Aliases = {}, Description = "Creates a box hitbox. ;boxreach [num]"}, function(args) Modules.Reach:Apply("box", tonumber(args[1]) or 15) end)
-RegisterCommand({Name = "resetreach", Aliases = {"unreach"}, Description = "Resets tool reach to normal."}, function() Modules.Reach:Reset() end)
+function Modules.Reach:Clear()
+    self:Reset() -- Also reset the currently held tool.
+    self.State.PersistentConfig = nil
+    DoNotif("Persistent reach setting cleared. Will not re-apply on respawn.", 4)
+end
 
+function Modules.Reach:Initialize()
+    -- This sets up the automatic re-application hook.
+    LocalPlayer.CharacterAdded:Connect(function(character)
+        -- This connection waits for a tool to be added to the new character.
+        character.ChildAdded:Connect(function(child)
+            if child:IsA("Tool") and self.State.PersistentConfig then
+                local config = self.State.PersistentConfig
+                -- Check if the newly added tool is the one we want to modify.
+                if child.Name == config.toolName then
+                    task.wait(0.1) -- Wait a moment for all parts to load inside the tool.
+                    local targetPart = child:FindFirstChild(config.partName, true)
+                    if targetPart and targetPart:IsA("BasePart") then
+                        self:_applyReachToPart(targetPart, config.reachType, config.reachSize)
+                        DoNotif("Persistent reach re-applied to " .. targetPart.Name, 3)
+                    end
+                end
+            end
+        end)
+    end)
+end
+
+-- Initialize the persistence system when the script starts.
+Modules.Reach:Initialize()
+
+-- Register Commands
+RegisterCommand({Name = "reach", Aliases = {}, Description = "Applies directional reach. ;reach [num]"}, function(args) Modules.Reach:Apply("directional", tonumber(args[1]) or 20) end)
+RegisterCommand({Name = "boxreach", Aliases = {}, Description = "Applies box reach. ;boxreach [num]"}, function(args) Modules.Reach:Apply("box", tonumber(args[1]) or 20) end)
+RegisterCommand({Name = "resetreach", Aliases = {"unreach"}, Description = "Resets reach on the currently held tool."}, function() Modules.Reach:Reset() end)
+RegisterCommand({Name = "clearreach", Aliases = {}, Description = "Clears the saved reach setting to stop it from re-applying."}, function() Modules.Reach:Clear() end)
 RegisterCommand({Name = "goto", Aliases = {}, Description = "Teleports to a player. ;goto [player]"}, function(args)
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
