@@ -3162,71 +3162,61 @@ RegisterCommand({
 end)
 
 
-RegisterCommand({
-    Name = "fixcam",
-    Aliases = {"fix", "unlockcam"},
-    Description = "Unlocks camera, allows zooming through walls, and forces third-person."
-}, function(args)
-    
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
-    local RunService = game:GetService("RunService")
+Modules.CameraFix = {
+    State = {
+        IsEnabled = false,
+        Connection = nil,
+        OriginalMaxZoom = 400,
+        OriginalOcclusionMode = Enum.DevCameraOcclusionMode.Zoom
+    }
+}
 
-    if not LocalPlayer then return end
+function Modules.CameraFix:Toggle()
+    self.State.IsEnabled = not self.State.IsEnabled
 
-    if isCameraFixed and cameraFixConnection and cameraFixConnection.Connected then
-        
-        
-        cameraFixConnection:Disconnect()
-        cameraFixConnection = nil
-        
-        
-        pcall(function()
-            if originalOcclusionMode and originalOcclusionMode ~= nil then
-                LocalPlayer.DevCameraOcclusionMode = originalOcclusionMode
-            end
-            if originalMaxZoom and originalMaxZoom ~= nil then
-                LocalPlayer.CameraMaxZoomDistance = originalMaxZoom
-            end
-        end)
-        
-        isCameraFixed = false
-        DoNotif("Camera override disabled.", 3)
-    else
-        
-    
-        originalMaxZoom = LocalPlayer.CameraMaxZoomDistance
-        originalOcclusionMode = LocalPlayer.DevCameraOcclusionMode
-        
+    if self.State.IsEnabled then
+        -- Save original settings before applying overrides
+        self.State.OriginalMaxZoom = LocalPlayer.CameraMaxZoomDistance
+        self.State.OriginalOcclusionMode = LocalPlayer.DevCameraOcclusionMode
         
         LocalPlayer.CameraMaxZoomDistance = 10000 
         
-        
-        local success, err = pcall(function()
-            
+        local success = pcall(function()
             LocalPlayer.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.None
         end)
-
         if not success then
-            
-            
-            LocalPlayer.DevCameraOcclusionMode = 0 
-            
-            
-            warn("Failed to set DevCameraOcclusionMode to Enum.None. Falling back to numeric value 0. Error: " .. tostring(err))
+            pcall(function() LocalPlayer.DevCameraOcclusionMode = 0 end) -- Fallback for older executors
         end
         
-        
-        cameraFixConnection = RunService.RenderStepped:Connect(function()
-            
+        self.State.Connection = RunService.RenderStepped:Connect(function()
             if LocalPlayer.CameraMode ~= Enum.CameraMode.Classic then
                 LocalPlayer.CameraMode = Enum.CameraMode.Classic
             end
         end)
         
-        isCameraFixed = true
         DoNotif("Camera override enabled (with wall-zoom).", 3)
+    else
+        -- Disable and restore original settings
+        if self.State.Connection then
+            self.State.Connection:Disconnect()
+            self.State.Connection = nil
+        end
+        
+        pcall(function()
+            LocalPlayer.DevCameraOcclusionMode = self.State.OriginalOcclusionMode
+            LocalPlayer.CameraMaxZoomDistance = self.State.OriginalMaxZoom
+        end)
+        
+        DoNotif("Camera override disabled.", 3)
     end
+end
+
+RegisterCommand({
+    Name = "fixcam",
+    Aliases = {"fix", "unlockcam"},
+    Description = "Unlocks camera, allows zooming through walls, and forces third-person."
+}, function()
+    Modules.CameraFix:Toggle()
 end)
 
 
