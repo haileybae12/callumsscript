@@ -94,7 +94,32 @@ local CommandInfo = {}
 local Modules = {}
 
 
+local function secureLoadstring(url, notif)
+    DoNotif(notif, 2)
+    
+    -- Step 1: Securely fetch the script source.
+    local success, source = pcall(game.HttpGet, game, url)
+    if not success or not source then
+        warn("SecureLoadstring Error: Failed to HttpGet from URL:", url, "| Error:", tostring(source))
+        DoNotif("Error: Could not download source code.", 4)
+        return
+    end
 
+    -- Step 2: Compile the source code into a function.
+    local scriptFunction, compileError = loadstring(source)
+    if not scriptFunction then
+        warn("SecureLoadstring Error: Failed to compile source from URL:", url, "| Error:", tostring(compileError))
+        DoNotif("Error: The remote script has a syntax error.", 4)
+        return
+    end
+
+    -- Step 3: Securely execute the compiled function.
+    local runSuccess, runtimeError = pcall(scriptFunction)
+    if not runSuccess then
+        warn("SecureLoadstring Error: A runtime error occurred in script from URL:", url, "| Error:", tostring(runtimeError))
+        DoNotif("Error: The remote script failed to execute.", 4)
+    end
+end
 --// Main Functions
 function DoNotif(text, duration)
     pcall(function()
@@ -3269,7 +3294,15 @@ RegisterCommand({Name = "gamingchair", Aliases = {"gc"}, Description = "The best
 
 RegisterCommand({Name = "zgui", Aliases = {"upd3", "zui"}, Description = "For Zombie Game upd3"}, function() loadstringCmd("https://raw.githubusercontent.com/zukatechdevelopment-ux/luaprojectse3/refs/heads/main/ZGUI.txt", "Loaded GUI") end)
 
-RegisterCommand({Name = "reload", Aliases = {"update", "exec"}, Description = "Reloads and re-executes the admin script from the GitHub source."}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/Main.lua", "Reloading admin from source...") end)
+--// [REPLACE WITH THIS]
+RegisterCommand({
+    Name = "reload",
+    Aliases = {"update", "exec"},
+    Description = "Reloads and re-executes the admin script from the GitHub source."
+}, function()
+    secureLoadstring("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/Main.lua", "Reloading admin from source...")
+end)
+
 
 RegisterCommand({ Name = "zoneui", Aliases = {"guns"}, Description = "Loads the Best Gun Giver for Zombie Zone" }, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/ZombieZone.lua", "Loaded") end) 
 
