@@ -1,5 +1,5 @@
 -- Introduction Splash Screen
-(function()
+local function showSplashScreen()
     local TweenService = game:GetService("TweenService")
     local CoreGui = game:GetService("CoreGui")
     local THEME = {
@@ -33,7 +33,7 @@
     icon.BackgroundTransparency = 1
     icon.Image = THEME.IconAssetId
     icon.ImageColor3 = THEME.AccentColor
-    icon.ImageTransparency = 0
+    icon.ImageTransparency = 1 -- Start transparent
     local title = Instance.new("TextLabel", centerFrame)
     title.Size = UDim2.new(1, 0, 0.2, 0)
     title.Position = UDim2.fromScale(0.5, 0.65)
@@ -65,7 +65,7 @@
     }
     local fadeOutTweens = {
         TweenService:Create(background, tweenInfoOut, { BackgroundTransparency = 1 }),
-        TweenService:Create(icon, tweenInfoOut, { ImageTransparency = 0 }),
+        TweenService:Create(icon, tweenInfoOut, { ImageTransparency = 1 }),
         TweenService:Create(title, tweenInfoOut, { TextTransparency = 1 }),
         TweenService:Create(subtitle, tweenInfoOut, { TextTransparency = 1 })
     }
@@ -74,7 +74,9 @@
     for _, tween in ipairs(fadeOutTweens) do tween:Play() end
     fadeOutTweens[1].Completed:Wait()
     splashGui:Destroy()
-end)()
+end
+
+showSplashScreen() -- Call the function
 
 --// Services
 local Players = game:GetService("Players")
