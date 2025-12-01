@@ -964,11 +964,131 @@ RegisterCommand({ Name = "noclip", Aliases = {"nc"}, Description = "Allows you t
     Modules.NoClip:Toggle()
 end)
 
+Modules.AnimationFreezer = {
+    State = {
+        IsEnabled = false,
+        CharacterConnection = nil,
+        Originals = {} -- Store original animators per character
+    }
+}
 
+function Modules.AnimationFreezer:_applyFreeze(character)
+    if not character or self.State.Originals[character] then return end -- Already applied or no character
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if not animator then return end
+
+    -- Store the original animator so we can restore it later
+    self.State.Originals[character] = animator
+
+
+    local fakeAnimationTrack = {
+        IsPlaying = false,
+        Length = 0,
+        TimePosition = 0,
+        Speed = 0,
+        Play = function() end,
+        Stop = function() end,
+        Pause = function() end,
+        AdjustSpeed = function() end,
+        GetMarkerReachedSignal = function() return { Connect = function() end } end,
+        GetTimeOfKeyframe = function() return 0 end,
+        Destroy = function() end
+    }
+    
+    -- We create a proxy (a stand-in) for the real Animator.
+    local animatorProxy = {}
+    local animatorMetatable = {
+        __index = function(t, key)
+            -- Intercept the call to LoadAnimation
+            if tostring(key):lower() == "loadanimation" then
+                -- Return a function that, when called, gives back our fake track.
+                return function()
+                    return fakeAnimationTrack
+                end
+            else
+                return self.State.Originals[character][key]
+            end
+        end
+    }
+
+    -- Apply the metatable to our proxy
+    setmetatable(animatorProxy, animatorMetatable)
+    
+    -- Replace the real Animator with our proxy
+    animator.Parent = nil
+    animatorProxy.Name = "Animator"
+    animatorProxy.Parent = humanoid
+end
+
+function Modules.AnimationFreezer:_removeFreeze(character)
+    if not character or not self.State.Originals[character] then return end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    -- Find our fake proxy and the original animator
+    local proxy = humanoid:FindFirstChild("Animator")
+    local original = self.State.Originals[character]
+
+    if proxy then proxy:Destroy() end
+    if original then original.Parent = humanoid end
+
+    self.State.Originals[character] = nil
+end
+
+function Modules.AnimationFreezer:Toggle()
+    self.State.IsEnabled = not self.State.IsEnabled
+
+    if self.State.IsEnabled then
+        DoNotif("Animation Freezer Enabled", 2)
+        
+        -- Apply to the current character if it exists
+        if LocalPlayer.Character then
+            self:_applyFreeze(LocalPlayer.Character)
+        end
+        
+        -- Apply to all future characters
+        self.State.CharacterConnection = LocalPlayer.CharacterAdded:Connect(function(character)
+            -- A small delay is crucial to ensure the Animator has been created
+            task.wait(0.1) 
+            self:_applyFreeze(character)
+        end)
+    else
+        DoNotif("Animation Freezer Disabled", 2)
+        
+        -- Remove from the current character
+        if LocalPlayer.Character then
+            self:_removeFreeze(LocalPlayer.Character)
+        end
+
+        -- Stop listening for new characters
+        if self.State.CharacterConnection then
+            self.State.CharacterConnection:Disconnect()
+            self.State.CharacterConnection = nil
+        end
+        
+        -- Clean up any remaining tracked originals just in case
+        for char, animator in pairs(self.State.Originals) do
+            self:_removeFreeze(char)
+        end
+    end
+end
+
+-- Register the command in your system
+RegisterCommand({
+    Name = "freezeanim",
+    Aliases = {"noanim", "fa"},
+    Description = "Freezes all local character animations to skip delays (e.g., weapon swings)."
+}, function()
+    Modules.AnimationFreezer:Toggle()
+end)
 
 
 Modules.Decompiler = { State = { IsInitialized = false } }
-
 function Modules.Decompiler:Initialize()
     if self.State.IsInitialized then
         return DoNotif("Decompiler is already initialized.", 3)
@@ -983,7 +1103,6 @@ function Modules.Decompiler:Initialize()
         return DoNotif("Decompiler Error: A compatible HTTP function is required.", 5)
     end
 
-    -- The core API logic
     task.spawn(function()
     local API_URL = "http://api.plusgiant5.com"
     local last_call_time = 0
@@ -2053,8 +2172,100 @@ RegisterCommand({
     end
 end)
 
+--// Zombie Zone Force Equip Module
+Modules.ZombieZoneEquipper = {
+    State = {
+        IsInitialized = false,
+        EquipRemote = nil,
+        ItemData = nil
+    }
+}
 
+function Modules.ZombieZoneEquipper:Initialize()
+    -- This function runs only once, the first time the command is used.
+    if self.State.IsInitialized then return true end
 
+    local success, remote = pcall(function()
+        return ReplicatedStorage.events:WaitForChild("equipItem", 5)
+    end)
+    if not success or not remote then
+        DoNotif("Equipper Error: Could not find 'equipItem' remote. Not in Zombie Zone?", 5)
+        return false
+    end
+    self.State.EquipRemote = remote
+
+    local success, data = pcall(function()
+        return require(ReplicatedStorage.modules.itemData)
+    end)
+    if not success or not data then
+        DoNotif("Equipper Error: Could not load itemData module.", 5)
+        return false
+    end
+    self.State.ItemData = data
+
+    self.State.IsInitialized = true
+    print("Zombie Zone Equipper Initialized Successfully.")
+    return true
+end
+
+function Modules.ZombieZoneEquipper:FindItemByName(query)
+    -- This is a direct, improved port from the original script.
+    query = query:lower()
+    
+    -- First, look for an exact match (case-insensitive)
+    for itemName, _ in pairs(self.State.ItemData) do
+        if itemName:lower() == query then return itemName end
+    end
+    
+    -- If no exact match, find the first partial match
+    for itemName, _ in pairs(self.State.ItemData) do
+        if itemName:lower():find(query, 1, true) then return itemName end
+    end
+    
+    return nil
+end
+
+function Modules.ZombieZoneEquipper:Execute(itemNameQuery)
+    -- First, ensure the module is initialized and ready.
+    if not self:Initialize() then return end
+
+    local targetItemName = self:FindItemByName(itemNameQuery)
+    
+    if targetItemName then
+        DoNotif("Found item: " .. targetItemName, 1.5)
+        
+        -- Use a protected call for the remote invocation itself.
+        local success, result = pcall(function()
+            return self.State.EquipRemote:InvokeServer(targetItemName)
+        end)
+        
+        if success then
+            DoNotif("Force-equipped: " .. targetItemName, 3)
+        else
+            DoNotif("Remote Error: " .. tostring(result), 5)
+        end
+    else
+        DoNotif("Could not find an item matching '" .. itemNameQuery .. "'.", 3)
+    end
+end
+
+-- Register the command with your admin system
+RegisterCommand({
+    Name = "equip",
+    Aliases = {"forceequip", "item"},
+    Description = "Force equips an item in Zombie Zone. Usage: equip <item_name>"
+}, function(args)
+    if #args == 0 then
+        DoNotif("Usage: ;equip <item name>", 3)
+        -- As a helper, list a few known good items from the original script
+        DoNotif("Try: Nyx Echo, Revenant-45, or Nekomancer Staff", 5)
+        return
+    end
+    
+    -- Join all arguments to handle item names with spaces
+    local fullItemName = table.concat(args, " ")
+    Modules.ZombieZoneEquipper:Execute(fullItemName)
+end)
 
 RegisterCommand({
     Name = "fixcam",
@@ -2161,7 +2372,7 @@ RegisterCommand({Name = "lagswitch", Aliases = {"lag"}, Description = "Lag Switc
 
 RegisterCommand({Name = "blockr", Aliases = {"br"}, Description = "block remotes"}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/lua3/refs/heads/main/BlockRemote.lua", "Loading...") end)
 
-RegisterCommand({Name = "noanimations", Aliases = {"noanim"}, Description = "Stops local animations"}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/lua3/refs/heads/main/noanimations.lua", "Loading...") end)
+RegisterCommand({Name = "stopanimations", Aliases = {"stopa"}, Description = "Stops local animations"}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/lua3/refs/heads/main/noanimations.lua", "Loading...") end)
 
 RegisterCommand({Name = "catbypasser", Aliases = {"cat"}, Description = "Loads the Cat Bypasser"}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/lua3/refs/heads/main/CatBypasser(Reborn).lua", "Loading...") end)
 
