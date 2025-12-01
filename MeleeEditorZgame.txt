@@ -1,0 +1,178 @@
+--================================================================
+--= Universal Melee Editor V2
+--= Architect: Callum
+--= Analysis: The game uses a shared ModuleScript for weapon stats.
+--=           By requiring the module, we get a direct reference to
+--=           the cached table that all server scripts use. Modifying
+--=           this table directly poisons the data source for the
+--=           entire session. No complex hooks are needed.
+--================================================================
+
+--// Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+
+--// Utility Functions
+local function deepcopy(original)
+    local copy = {}
+    for key, value in pairs(original) do
+        if type(value) == "table" then
+            copy[key] = deepcopy(value)
+        else
+            copy[key] = value
+        end
+    end
+    return copy
+end
+
+--// Module Validation & Caching
+local globalConfigModule = ReplicatedStorage:FindFirstChild("GlobalConfig")
+if not (globalConfigModule and globalConfigModule:IsA("ModuleScript")) then
+    warn("Melee Editor Error: 'GlobalConfig' ModuleScript not found in ReplicatedStorage.")
+    return
+end
+
+--// Core Logic
+-- 'liveConfig' is the actual, shared table the game uses. We modify this directly.
+local liveConfig = require(globalConfigModule)
+-- 'backupConfig' is our private, unmodified copy used for the restore function.
+local backupConfig = deepcopy(liveConfig)
+
+
+--// UI Creation
+local gui = Instance.new("ScreenGui")
+gui.Name = "MeleeEditorGUI_" .. math.random(1000, 9999)
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+gui.Parent = CoreGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.fromOffset(450, 300)
+mainFrame.Position = UDim2.fromScale(0.5, 0.5)
+mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = gui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
+
+local titleLabel = Instance.new("TextLabel", mainFrame)
+titleLabel.Size = UDim2.new(1, 0, 0, 30)
+titleLabel.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+titleLabel.Font = Enum.Font.GothamSemibold
+titleLabel.Text = "Universal Melee Editor V2"
+titleLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+titleLabel.TextSize = 16
+
+local weaponList = Instance.new("ScrollingFrame", mainFrame)
+weaponList.Size = UDim2.new(0, 150, 1, -40)
+weaponList.Position = UDim2.fromOffset(10, 35)
+weaponList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+weaponList.BorderSizePixel = 0
+weaponList.ScrollBarThickness = 6
+Instance.new("UIListLayout", weaponList).Padding = UDim.new(0, 5)
+
+local controlFrame = Instance.new("Frame", mainFrame)
+controlFrame.Size = UDim2.new(1, -180, 1, -40)
+controlFrame.Position = UDim2.fromOffset(170, 35)
+controlFrame.BackgroundTransparency = 1
+
+local selectedWeaponLabel = Instance.new("TextLabel", controlFrame)
+selectedWeaponLabel.Size = UDim2.new(1, 0, 0, 25)
+selectedWeaponLabel.Font = Enum.Font.GothamBold
+selectedWeaponLabel.Text = "Select a Weapon"
+selectedWeaponLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+selectedWeaponLabel.TextSize = 18
+selectedWeaponLabel.BackgroundTransparency = 1
+
+local damageInput = Instance.new("TextBox", controlFrame)
+damageInput.Size = UDim2.new(1, 0, 0, 35)
+damageInput.Position = UDim2.new(0, 0, 0, 50)
+damageInput.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+damageInput.Font = Enum.Font.Gotham
+damageInput.PlaceholderText = "Damage (e.g., 500)"
+damageInput.TextColor3 = Color3.fromRGB(240, 240, 240)
+Instance.new("UICorner", damageInput).CornerRadius = UDim.new(0, 6)
+
+local cooldownInput = Instance.new("TextBox", controlFrame)
+cooldownInput.Size = UDim2.new(1, 0, 0, 35)
+cooldownInput.Position = UDim2.new(0, 0, 0, 95)
+cooldownInput.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+cooldownInput.Font = Enum.Font.Gotham
+cooldownInput.PlaceholderText = "Cooldown (e.g., 0)"
+cooldownInput.TextColor3 = Color3.fromRGB(240, 240, 240)
+Instance.new("UICorner", cooldownInput).CornerRadius = UDim.new(0, 6)
+
+local applyButton = Instance.new("TextButton", controlFrame)
+applyButton.Size = UDim2.new(1, 0, 0, 40)
+applyButton.Position = UDim2.new(0, 0, 0, 150)
+applyButton.BackgroundColor3 = Color3.fromRGB(80, 100, 255)
+applyButton.Font = Enum.Font.GothamBold
+applyButton.Text = "Apply Stats"
+applyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+Instance.new("UICorner", applyButton).CornerRadius = UDim.new(0, 6)
+
+local restoreButton = Instance.new("TextButton", controlFrame)
+restoreButton.Size = UDim2.new(1, 0, 0, 30)
+restoreButton.Position = UDim2.new(0, 0, 0, 200)
+restoreButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+restoreButton.Font = Enum.Font.Gotham
+restoreButton.Text = "Restore Originals"
+restoreButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+Instance.new("UICorner", restoreButton).CornerRadius = UDim.new(0, 6)
+
+--// UI Logic & Population
+local selectedWeaponName = nil
+
+-- Populate the list from the live config data
+for weaponName, stats in pairs(liveConfig.Melee) do
+    if type(stats) ~= "table" or not stats.Damage then continue end
+    
+    local weaponButton = Instance.new("TextButton", weaponList)
+    weaponButton.Name = weaponName
+    weaponButton.Size = UDim2.new(1, 0, 0, 30)
+    weaponButton.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+    weaponButton.TextColor3 = Color3.fromRGB(220, 220, 230)
+    weaponButton.Font = Enum.Font.Code
+    weaponButton.Text = weaponName
+    weaponButton.TextSize = 14
+    Instance.new("UICorner", weaponButton).CornerRadius = UDim.new(0, 4)
+    
+    weaponButton.MouseButton1Click:Connect(function()
+        selectedWeaponName = weaponName
+        selectedWeaponLabel.Text = `Selected: {weaponName}`
+        damageInput.Text = tostring(liveConfig.Melee[weaponName].Damage)
+        cooldownInput.Text = tostring(liveConfig.Melee[weaponName].Cooldown)
+    end)
+end
+
+applyButton.MouseButton1Click:Connect(function()
+    if not selectedWeaponName then return end
+    
+    local newDamage = tonumber(damageInput.Text)
+    local newCooldown = tonumber(cooldownInput.Text)
+    
+    if newDamage then
+        liveConfig.Melee[selectedWeaponName].Damage = newDamage
+        print(`--> [Melee Editor] Set {selectedWeaponName} live Damage to {newDamage}`)
+    end
+    
+    if newCooldown then
+        liveConfig.Melee[selectedWeaponName].Cooldown = newCooldown
+        print(`--> [Melee Editor] Set {selectedWeaponName} live Cooldown to {newCooldown}`)
+    end
+end)
+
+restoreButton.MouseButton1Click:Connect(function()
+    -- Restore the live config by copying from our clean backup
+    liveConfig.Melee = deepcopy(backupConfig.Melee)
+    
+    if selectedWeaponName then
+        -- Refresh UI to show the restored values
+        damageInput.Text = tostring(liveConfig.Melee[selectedWeaponName].Damage)
+        cooldownInput.Text = tostring(liveConfig.Melee[selectedWeaponName].Cooldown)
+    end
+    print("--> [Melee Editor] All melee stats restored to their original values.")
+end)
+
+print("--> [Melee Editor V2] GUI Initialized. Changes are now applied directly.")
