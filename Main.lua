@@ -1268,6 +1268,125 @@ RegisterCommand({
     Modules.AnimationFreezer:Toggle()
 end)
 
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+Modules.SuperPush = {
+    State = {
+        IsEnabled = false,
+        Connections = {},
+        Originals = setmetatable({}, {__mode = "k"}) -- Use a weak table for part references
+    },
+    Config = {
+        PUSH_FORCE = 300,   -- The intensity of the velocity spike.
+        DENSITY = 100,      -- How dense/heavy your character becomes. (Default is ~0.7)
+        COOLDOWN = 0.2,     -- Cooldown between pushes in seconds.
+        lastPushTime = 0
+    }
+}
+
+-- Create the physical properties object once for efficiency
+local HEAVY_PROPERTIES = PhysicalProperties.new(Modules.SuperPush.Config.DENSITY, 0.5, 0.5)
+
+function Modules.SuperPush:_cleanupCharacter(character)
+    if not character then return end
+
+    -- Disconnect the touch event
+    if self.State.Connections.Touch then
+        self.State.Connections.Touch:Disconnect()
+        self.State.Connections.Touch = nil
+    end
+
+    -- Restore original physical properties
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and self.State.Originals[part] then
+            part.CustomPhysicalProperties = self.State.Originals[part]
+            self.State.Originals[part] = nil -- Clear the stored value
+        end
+    end
+end
+
+function Modules.SuperPush:_applyToCharacter(character)
+    if not character then return end
+    
+    local hrp = character:WaitForChild("HumanoidRootPart", 5)
+    if not hrp then return end
+
+    -- 1. Apply Heavyweight Properties
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            -- Store the original properties if we haven't already
+            if not self.State.Originals[part] then
+                self.State.Originals[part] = part.CustomPhysicalProperties
+            end
+            part.CustomPhysicalProperties = HEAVY_PROPERTIES
+        end
+    end
+
+    -- 2. Setup Momentum Push Connection
+    self.State.Connections.Touch = hrp.Touched:Connect(function(otherPart)
+        if os.clock() - self.Config.lastPushTime < self.Config.COOLDOWN then return end
+        
+        local targetModel = otherPart:FindFirstAncestorWhichIsA("Model")
+        if not targetModel then return end
+        
+        local targetPlayer = Players:GetPlayerFromCharacter(targetModel)
+        if not targetPlayer or targetPlayer == LocalPlayer then return end
+
+        local direction = hrp.CFrame.LookVector
+        hrp.AssemblyLinearVelocity = direction * self.Config.PUSH_FORCE
+        
+        self.Config.lastPushTime = os.clock()
+
+        task.wait()
+        if hrp and hrp.Parent then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        end
+    end)
+end
+
+function Modules.SuperPush:Toggle()
+    self.State.IsEnabled = not self.State.IsEnabled
+
+    if self.State.IsEnabled then
+        DoNotif("Super Push Enabled (Force: " .. self.Config.PUSH_FORCE .. ", Density: " .. self.Config.DENSITY .. ")", 3)
+        
+        -- Apply to current character
+        if LocalPlayer.Character then
+            self:_applyToCharacter(LocalPlayer.Character)
+        end
+
+        -- Handle future characters and clean up old ones
+        self.State.Connections.CharacterAdded = LocalPlayer.CharacterAdded:Connect(function(character)
+            self:_applyToCharacter(character)
+        end)
+        self.State.Connections.CharacterRemoving = LocalPlayer.CharacterRemoving:Connect(function(character)
+            self:_cleanupCharacter(character)
+        end)
+    else
+        DoNotif("Super Push Disabled", 2)
+        
+        -- Disconnect character event listeners
+        if self.State.Connections.CharacterAdded then self.State.Connections.CharacterAdded:Disconnect() end
+        if self.State.Connections.CharacterRemoving then self.State.Connections.CharacterRemoving:Disconnect() end
+        table.clear(self.State.Connections)
+
+        -- Clean up effects from the current character
+        if LocalPlayer.Character then
+            self:_cleanupCharacter(LocalPlayer.Character)
+        end
+    end
+end
+
+RegisterCommand({
+    Name = "superpush",
+    Aliases = {"push", "bump", "heavy"},
+    Description = "Increases your mass and adds a velocity push when you bump into players."
+}, function()
+    Modules.SuperPush:Toggle()
+end
+
 
 --// DECOMPILER MODULE [XENO COMPATIBLE]
 Modules.Decompiler = { State = { IsInitialized = false } }
