@@ -1,19 +1,19 @@
 --[[
-    Script: Astral Projection V9 (Definitive Core)
+    Script: Astral Projection V10 (Anchor Core)
     Architect: Callum
-    Date: 2025-11-29
+    Date: 2025-12-01
     Description:
-    The definitive and final build. This version uses the original, proven exploit method
-    of parenting the HumanoidRootPart to nil. The mobility-lock is resolved by implementing
-    a "State Change Jolt," which forces the Humanoid controller to re-evaluate its state
-    immediately after the desync, ensuring stable, lock-free movement. This architecture
-    is a perfect synthesis of the original working mechanic and a stable, modern framework.
+    This build introduces a "physical anchor" marker. When projecting, a highlight
+    is placed at the character's last known server position (the desync point).
+    This allows the user to see their "real" body's location while their ghost
+    form is invisible, providing critical tactical awareness.
 --]]
 
 --// --- SERVICES & CORE VARIABLES ---
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace") -- Added for the anchor
 
 local LOCAL_PLAYER = Players.LocalPlayer
 local PLAYER_GUI = LOCAL_PLAYER:WaitForChild("PlayerGui")
@@ -28,7 +28,8 @@ local State = {
     isSpawning = false,
     originalHRP = nil,
     originalParent = nil,
-    deathConnection = nil
+    deathConnection = nil,
+    positionMarker = nil -- NEW: Will hold our physical anchor part
 }
 
 --// --- GUI ELEMENTS ---
@@ -68,11 +69,29 @@ local function setState(shouldProject)
         State.originalHRP = hrp
         State.originalParent = character
         
+        --[[
+            NEW: Create the physical anchor BEFORE detaching the HRP.
+            This marker represents your server-side body.
+        ]]
+        if State.positionMarker then State.positionMarker:Destroy() end
+        local marker = Instance.new("Part")
+        marker.Name = "PhysicalAnchor"
+        marker.Size = Vector3.new(4, 5, 2)
+        marker.CFrame = hrp.CFrame
+        marker.Anchored = true
+        marker.CanCollide = false
+        marker.Transparency = 0.7
+        marker.Parent = Workspace
+        State.positionMarker = marker
+
+        local highlight = Instance.new("Highlight", marker)
+        highlight.FillColor = Color3.fromRGB(255, 50, 50) -- A distinct red color
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.FillTransparency = 0.6
+        
         -- THE ORIGINAL CORE MECHANIC: Detach the HRP completely.
         State.originalHRP.Parent = nil 
         
-        -- THE DEFINITIVE FIX: Force the Humanoid to re-evaluate its state.
-        -- This "jolt" prevents the mobility lock.
         humanoid:ChangeState(Enum.HumanoidStateType.Running)
         
         applyVisuals(character, true)
@@ -83,7 +102,14 @@ local function setState(shouldProject)
             State.isProjecting = false; return
         end
         
-        -- Re-attach the HRP to the character model to resynchronize.
+        --[[
+            NEW: Clean up the physical anchor when resynchronizing.
+        ]]
+        if State.positionMarker then
+            State.positionMarker:Destroy()
+            State.positionMarker = nil
+        end
+        
         State.originalHRP.Parent = State.originalParent
         
         State.isProjecting = false
@@ -104,6 +130,7 @@ local function onCharacterAdded(character)
     State.isSpawning = true
     statusLabel.Text = "Astral Projection: RESPAWNING..."
 
+    -- The setState(false) call here will now also clean up the anchor.
     if State.isProjecting then setState(false) end
     if State.deathConnection then State.deathConnection:Disconnect() end
     
@@ -125,4 +152,4 @@ end)
 if LOCAL_PLAYER.Character then onCharacterAdded(LOCAL_PLAYER.Character) end
 LOCAL_PLAYER.CharacterAdded:Connect(onCharacterAdded)
 
-print("--- Astral Projection V9 (Definitive Core) Initialized ---")
+print("--- Astral Projection V10 (Anchor Core) Initialized ---")
