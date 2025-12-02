@@ -7,7 +7,7 @@
         Subtitle = "Loading Zuka Tech...",
         IconAssetId = "rbxassetid://7243158473",
         BackgroundColor = Color3.fromRGB(20, 20, 25),
-        AccentColor = Color3.fromRGB(0, 255, 255), -- Bright Cyan
+        AccentColor = Color3.fromRGB(0, 255, 255),
         TextColor = Color3.fromRGB(240, 240, 240),
         FadeInTime = 0.5,
         HoldTime = 2.0,
