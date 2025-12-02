@@ -2483,7 +2483,7 @@ end
 
 RegisterCommand({
     Name = "superpush",
-    Aliases = {"push", "bump", "heavy"},
+    Aliases = {"bump", "heavy"},
     Description = "Increases your mass and adds a velocity push when you bump into players."
 }, function()
     Modules.SuperPush:Toggle()
