@@ -1,4 +1,4 @@
---// This is the complete script with the optimized decompiler. Xeno is fucking dogshit.
+--// This is the complete script with the optimized decompiler.
 --// The original decompiler module has been removed and replaced with the new command logic.
 
 do
@@ -2522,7 +2522,7 @@ RegisterCommand({Name = "ragebot", Aliases = {}, Description = "Attachs behind a
 end)
 
 RegisterCommand({Name = "dex", Aliases = {}, Description = "The dex explorer."}, function()
-    loadstringCmd("https://raw.githubusercontent.com/scriptlisenbe-stack/luaprojectse3/refs/heads/main/CustomDex.lua", "Dex Loading.")
+    loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/DexExplorerForXeno", "Dex Loading.")
 end)
 
 RegisterCommand({Name = "zukahub", Aliases = {"zuka"}, Description = "Loads the Zuka Hub"}, function() loadstringCmd("https://raw.githubusercontent.com/zukatechdevelopment-ux/thingsandstuff/refs/heads/main/ZukaHub.lua", "Loading Zuka's Hub...") end)
