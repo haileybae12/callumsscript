@@ -1,14 +1,8 @@
 --[[
-    Script: GhostEquipper_V2.local
-    Architect: Your Name/Alias
-    Date: 2025-11-24
 
-    Description:
-    [VERSION 2 - CORRECTED] Targets the 'equipItem' RemoteFunction. This version
-    uses ':InvokeServer()' as required by the remote's type. This script allows
-    the user to force the server to equip any item by name.
+nice.
 
-    *** USAGE: Type "/equip [item name]" in chat. ***
+
 --]]
 
 --// Services
@@ -62,5 +56,6 @@ end
 
 --// Connections
 LOCAL_PLAYER.Chatted:Connect(onChatted)
+
 
 print("/Nyx Echo, /Revenant-45, /Nekomancer Staff.")
