@@ -366,34 +366,46 @@ function Modules.CommandList:Populate()
     }
     function Modules.CommandBar:Toggle()
         if self.State.IsAnimating then return end
-            self.State.IsAnimating = true
-            self.State.IsEnabled = not self.State.IsEnabled
-            local isOpening = self.State.IsEnabled
-            local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-            if isOpening then
-                self.State.UI.Enabled = true
-                self.State.Container.Position = UDim2.fromScale(0.5, 0.82)
-                self.State.Container.BackgroundTransparency = 1
-                TweenService:Create(self.State.Container, tweenInfo, {
+        self.State.IsAnimating = true
+        self.State.IsEnabled = not self.State.IsEnabled
+        local isOpening = self.State.IsEnabled
+        local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+    
+        if isOpening then
+            self.State.UI.Enabled = true
+            self.State.Container.Position = UDim2.fromScale(0.5, 0.82)
+            self.State.Container.BackgroundTransparency = 1
+            local anim = TweenService:Create(self.State.Container, tweenInfo, {
                 Position = UDim2.fromScale(0.5, 0.8),
                 BackgroundTransparency = 1
-                }):Play()
-                self.State.TextBox:CaptureFocus()
+            })
+            anim:Play()
+            self.State.TextBox:CaptureFocus()
+    
+            task.spawn(function()
+                task.wait()
+                if self.State.IsEnabled then
+                    self.State.TextBox.Text = ""
+                end
+            end)
+    
+            anim.Completed:Connect(function()
                 self.State.IsAnimating = false
-            else
+            end)
+        else
             self.State.TextBox:ReleaseFocus()
             self:_ClearSuggestions()
             local anim = TweenService:Create(self.State.Container, tweenInfo, {
-            Position = UDim2.fromScale(0.5, 0.82),
-            BackgroundTransparency = 1
+                Position = UDim2.fromScale(0.5, 0.82),
+                BackgroundTransparency = 1
             })
             anim:Play()
             anim.Completed:Connect(function()
-            self.State.UI.Enabled = false
-            self.State.IsAnimating = false
-        end)
+                self.State.UI.Enabled = false
+                self.State.IsAnimating = false
+            end)
+        end
     end
-end
 function Modules.CommandBar:_ClearSuggestions()
     if not self.State.SuggestionsFrame then return end
         self.State.SuggestionsFrame.Visible = false
@@ -1959,9 +1971,9 @@ Connections = {},
 Originals = setmetatable({}, {__mode = "k"}) 
 },
 Config = {
-PUSH_FORCE = 300,   
+PUSH_FORCE = 900,   
 DENSITY = 100,      
-COOLDOWN = 0.2,     
+COOLDOWN = 0,     
 lastPushTime = 0
 }
 }
