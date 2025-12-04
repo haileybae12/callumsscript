@@ -2706,7 +2706,7 @@ RegisterCommand({Name = "reload", Aliases = {"update", "exec"}, Description = "R
 
 RegisterCommand({Name = "xenodg", Aliases = {"downgrade", "badexec"}, Description = "Reloads and downgrades the admin script because xeno shits itself using hooks."}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/Main.lua", "Reloading xeno port from source...") end)
 
-RegisterCommand({ Name = "zoneui", Aliases = {"guns"}, Description = "Loads the Best Gun Giver for Zombie Zone" }, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/ZombieZone.lua", "Loaded") end) 
+RegisterCommand({Name = "zoneui", Aliases = {"guns"}, Description = "Loads the Best Gun Giver for Zombie Zone" }, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/ZombieZone.lua", "Loaded") end) 
 
 RegisterCommand({Name = "ibtools", Aliases = {"btools"}, Description = "Upgraded Gui For Btools"}, function() loadstringCmd("https://raw.githubusercontent.com/legalize8ga-maker/PublicReleaseLua/refs/heads/main/ibtools.lua", "Loading Revamped Btools Gui") end)
 
@@ -2720,6 +2720,13 @@ RegisterCommand({Name = "attach", Aliases = {"glue"}, Description = "Old script 
 
 RegisterCommand({Name = "antiafk", Aliases = {"npcmode"}, Description = "Avoid being kicked for being idle."}, function() loadstringCmd("https://raw.githubusercontent.com/bloxtech1/luaprojects2/refs/heads/main/AutoPilotMode.lua", "Anti Afk loaded.") end)
 
+RegisterCommand({Name = "scriptblox", Aliases = {}, Description = "Loads the script blox api."}, function() loadstringCmd("https://raw.githubusercontent.com/AZYsGithub/chillz-workshop/main/ScriptSearcher", "Loading API..") end)
+
+RegisterCommand({Name = "freakyfling", Aliases = {}, Description = "Loads the Kawaii. GUI"}, function() loadstringCmd("https://raw.githubusercontent.com/hellohellohell012321/KAWAII-FREAKY-FLING/main/kawaii_freaky_fling.lua", "Loading GUI..") end)
+
+RegisterCommand({Name = "rem", Aliases = {}, Description = "In game exploit creation kit.."}, function() loadstringCmd("https://e-vil.com/anbu/rem.lua", "Loading Rem.") end)
+
+RegisterCommand({Name = "copyconsole", Aliases = {copy}, Description = "In game exploit creation kit.."}, function() loadstringCmd("https://raw.githubusercontent.com/scriptlisenbe-stack/luaprojectse3/refs/heads/main/consolecopy.lua", "Copy Console Activated.") end)
 
 --// Finalization
 function processCommand(message)
