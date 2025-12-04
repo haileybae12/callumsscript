@@ -78,6 +78,8 @@ do
     fadeOutTweens[1].Completed:Wait()
     splashGui:Destroy()
 end
+
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -123,6 +125,7 @@ function DoNotif(text, duration)
     notif:Destroy()
 end)
 end
+
 function RegisterCommand(info, func)
     if not info or not info.Name or not func then
         warn("Command registration failed: Missing info, name, or function.")
@@ -144,6 +147,7 @@ function RegisterCommand(info, func)
         end
     end
 end
+
 table.insert(CommandInfo, info)
 end
 Modules.AutoComplete = {};
@@ -159,6 +163,7 @@ function Modules.AutoComplete:GetMatches(prefix)
         table.sort(matches)
         return matches
     end
+
     Modules.CommandList = {
     State = {
     UI = nil,
