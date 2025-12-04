@@ -1381,47 +1381,123 @@ Description = "Prevents flinging and disables collision with other players."
 Modules.FlingProtection:Toggle()
 end)
 Modules.Reach = {
-State = {
-UI = nil
+    State = {
+        IsEnabled = false, -- Tracks if reach is active
+        ToolName = nil,    -- Stores the name of the modified tool
+        PartName = nil,    -- Stores the name of the specific part being resized
+        ReachType = nil,   -- 'box' or 'directional'
+        ReachSize = nil,   -- The numeric size of the reach
+        UI = nil           -- Reference to the active UI
+    },
+    Connections = {} -- Table to hold event connections
 }
-}
-function Modules.Reach:_getTool()
+
+-- Internal function to find a tool by its name (more specific than the old _getTool)
+function Modules.Reach:_getToolByName(toolName)
+    if not toolName then return nil end
     local character = LocalPlayer.Character
-    if character and character:FindFirstChildOfClass("Tool") then
-        return character:FindFirstChildOfClass("Tool")
+    if character and character:FindFirstChild(toolName) and character[toolName]:IsA("Tool") then
+        return character[toolName]
     end
-    if LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChildOfClass("Tool") then
-        return LocalPlayer.Backpack:FindFirstChildOfClass("Tool")
+    if LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChild(toolName) and LocalPlayer.Backpack[toolName]:IsA("Tool") then
+        return LocalPlayer.Backpack[toolName]
     end
     return nil
 end
+
+-- Internal function to find any equipped tool
+function Modules.Reach:_getEquippedTool()
+    local character = LocalPlayer.Character
+    if character then
+        return character:FindFirstChildOfClass("Tool")
+    end
+    return nil
+end
+
+-- Centralized logic to apply the visual/physical modifications to a specific part
+function Modules.Reach:_applyModificationToPart(part, reachType, size)
+    if not part or not part:IsA("BasePart") then return end
+
+    -- Store the original size if it hasn't been stored already
+    if not part:FindFirstChild("OGSize3") then
+        local v = Instance.new("Vector3Value", part)
+        v.Name = "OGSize3"
+        v.Value = part.Size
+    end
+
+    -- Clean up old selection box if it exists
+    if part:FindFirstChild("FunTIMES") then
+        part:FindFirstChild("FunTIMES"):Destroy()
+    end
+
+    -- Create the new selection box for visual feedback
+    local sb = Instance.new("SelectionBox", part)
+    sb.Name = "FunTIMES"
+    sb.Adornee = part
+    sb.LineThickness = 0.02
+    sb.Color3 = reachType == "box" and Color3.fromRGB(0, 100, 255) or Color3.fromRGB(255, 0, 0)
+    
+    -- Apply the size change
+    if reachType == "box" then
+        part.Size = Vector3.one * size
+    else -- "directional"
+        part.Size = Vector3.new(part.Size.X, part.Size.Y, size)
+    end
+    
+    part.Massless = true
+end
+
+-- Centralized logic to reset a part to its original state
+function Modules.Reach:_resetPart(part)
+    if not part or not part:IsA("BasePart") then return end
+    
+    local originalSize = part:FindFirstChild("OGSize3")
+    if originalSize then
+        part.Size = originalSize.Value
+        originalSize:Destroy()
+    end
+
+    local selectionBox = part:FindFirstChild("FunTIMES")
+    if selectionBox then
+        selectionBox:Destroy()
+    end
+end
+
+-- Main function to apply reach, now updated to use the state system
 function Modules.Reach:Apply(reachType, size)
-    local self = self 
+    local self = self
     if self.State.UI then
         self.State.UI:Destroy()
     end
-    local tool = self:_getTool()
+
+    local tool = self:_getEquippedTool()
     if not tool then
         return DoNotif("No tool equipped.", 3)
     end
+
     local parts = {}
     for _, p in ipairs(tool:GetDescendants()) do
         if p:IsA("BasePart") then
             table.insert(parts, p)
         end
     end
+
     if #parts == 0 then
         return DoNotif("The equipped tool has no physical parts.", 3)
     end
+
+    -- Create UI for part selection
     local ui = Instance.new("ScreenGui")
     ui.Name = "ReachPartSelector"
+    ui.Parent = CoreGui
     self.State.UI = ui
-    ui.Parent = CoreGui 
+
     local frame = Instance.new("Frame", ui)
     frame.Size = UDim2.fromOffset(250, 200)
     frame.Position = UDim2.new(0.5, -125, 0.5, -100)
     frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+
     local title = Instance.new("TextLabel", frame)
     title.Size = UDim2.new(1, 0, 0, 30)
     title.BackgroundTransparency = 1
@@ -1429,14 +1505,17 @@ function Modules.Reach:Apply(reachType, size)
     title.Text = "Select a Part to Modify"
     title.TextColor3 = Color3.fromRGB(200, 220, 255)
     title.TextSize = 16
+
     local scroll = Instance.new("ScrollingFrame", frame)
     scroll.Size = UDim2.new(1, -20, 1, -40)
     scroll.Position = UDim2.fromOffset(10, 35)
     scroll.BackgroundColor3 = frame.BackgroundColor3
     scroll.BorderSizePixel = 0
     scroll.ScrollBarThickness = 6
+    
     local layout = Instance.new("UIListLayout", scroll)
     layout.Padding = UDim.new(0, 5)
+
     for _, part in ipairs(parts) do
         local btn = Instance.new("TextButton", scroll)
         btn.Size = UDim2.new(1, 0, 0, 30)
@@ -1446,57 +1525,84 @@ function Modules.Reach:Apply(reachType, size)
         btn.Text = part.Name
         btn.TextSize = 14
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
         btn.MouseButton1Click:Connect(function()
-        if not part or not part.Parent then
+            if not part or not part.Parent then
+                ui:Destroy()
+                return DoNotif("Part no longer exists.", 3)
+            end
+
+            -- If another tool was modified, reset it first
+            if self.State.IsEnabled and self.State.ToolName and self.State.ToolName ~= tool.Name then
+                self:Reset()
+            end
+
+            -- SET THE STATE
+            self.State.IsEnabled = true
+            self.State.ToolName = tool.Name
+            self.State.PartName = part.Name
+            self.State.ReachType = reachType
+            self.State.ReachSize = size
+
+            -- Apply the modifications
+            self:_applyModificationToPart(part, reachType, size)
+            
             ui:Destroy()
-            return DoNotif("Part no longer exists.", 3)
-        end
-        if not part:FindFirstChild("OGSize3") then
-            local v = Instance.new("Vector3Value", part)
-            v.Name = "OGSize3"
-            v.Value = part.Size
-        end
-        if part:FindFirstChild("FunTIMES") then
-            part:FindFirstChild("FunTIMES"):Destroy()
-        end
-        local sb = Instance.new("SelectionBox", part)
-        sb.Adornee = part
-        sb.Name = "FunTIMES"
-        sb.LineThickness = 0.02
-        sb.Color3 = reachType == "box" and Color3.fromRGB(0, 100, 255) or Color3.fromRGB(255, 0, 0)
-        if reachType == "box" then
-            part.Size = Vector3.one * size
-        else 
-        part.Size = Vector3.new(part.Size.X, part.Size.Y, size)
+            self.State.UI = nil
+            DoNotif("Applied " .. reachType .. " reach of " .. size .. " to " .. part.Name, 3)
+        end)
     end
-    part.Massless = true
-    ui:Destroy()
-    self.State.UI = nil
-    DoNotif("Applied " .. reachType .. " reach of " .. size .. " to " .. part.Name, 3)
-end)
 end
-end
+
+-- Main function to reset reach, now using the state
 function Modules.Reach:Reset()
-    local tool = self:_getTool()
-    if not tool then
-        return DoNotif("No tool to reset.", 3)
+    if not self.State.IsEnabled then
+        return DoNotif("Reach is not active.", 3)
     end
-    for _, p in ipairs(tool:GetDescendants()) do
-        if p:IsA("BasePart") then
-            local originalSize = p:FindFirstChild("OGSize3")
-            if originalSize then
-                p.Size = originalSize.Value
-                originalSize:Destroy()
-            end
-            local selectionBox = p:FindFirstChild("FunTIMES")
-            if selectionBox then
-                selectionBox:Destroy()
-            end
+
+    local tool = self:_getToolByName(self.State.ToolName)
+    if tool and self.State.PartName then
+        local part = tool:FindFirstChild(self.State.PartName, true) -- recursive find
+        if part then
+            self:_resetPart(part)
         end
     end
+    
+    -- CLEAR THE STATE
+    self.State.IsEnabled = false
+    self.State.ToolName = nil
+    self.State.PartName = nil
+    self.State.ReachType = nil
+    self.State.ReachSize = nil
+
     DoNotif("Tool reach has been reset.", 3)
 end
 
+-- NEW: Initialization function to set up the respawn hook
+function Modules.Reach:Init()
+    -- This connection will fire every time the player's character spawns (including the first time)
+    self.Connections.CharacterAdded = LocalPlayer.CharacterAdded:Connect(function(character)
+        -- Short delay to ensure the tool has time to be equipped
+        task.wait(0.5)
+        
+        -- If reach is supposed to be active, re-apply it
+        if self.State.IsEnabled and self.State.ToolName and self.State.PartName then
+            local tool = character:FindFirstChild(self.State.ToolName)
+            if tool then
+                local part = tool:FindFirstChild(self.State.PartName, true)
+                if part then
+                    -- Re-run the modification logic on the part in the new tool
+                    self:_applyModificationToPart(part, self.State.ReachType, self.State.ReachSize)
+                end
+            end
+        end
+    end)
+end
+
+-- Call the initialization function to activate the respawn hook
+Modules.Reach:Init()
+
+-- Commands (Unchanged)
 RegisterCommand({Name = "reach", Aliases = {"swordreach"}, Description = "Extends sword reach. ;reach [num]"}, function(args) Modules.Reach:Apply("directional", tonumber(args[1]) or 15) end)
 RegisterCommand({Name = "boxreach", Aliases = {}, Description = "Creates a box hitbox. ;boxreach [num]"}, function(args) Modules.Reach:Apply("box", tonumber(args[1]) or 15) end)
 RegisterCommand({Name = "resetreach", Aliases = {"unreach"}, Description = "Resets tool reach to normal."}, function() Modules.Reach:Reset() end)
