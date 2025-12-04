@@ -2672,7 +2672,7 @@ RegisterCommand({Name = "ragebot", Aliases = {}, Description = "Attachs behind a
 end)
 
 RegisterCommand({Name = "dex", Aliases = {}, Description = "Xeno might fucking die, caution."}, function()
-    loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/DexExplorerForXeno", "Dex Loading.")
+    loadstringCmd("https://raw.githubusercontent.com/zukatechdevelopment-ux/luaprojectse3/refs/heads/main/CustomDex.lua", "Dex Loading.")
 end)
 
 RegisterCommand({Name = "zukahub", Aliases = {"zuka"}, Description = "Loads the Zuka Hub"}, function() loadstringCmd("https://raw.githubusercontent.com/zukatechdevelopment-ux/thingsandstuff/refs/heads/main/ZukaHub.lua", "Loading Zuka's Hub...") end)
