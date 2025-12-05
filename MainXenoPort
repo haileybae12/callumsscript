@@ -1139,7 +1139,7 @@ function Modules.AutoAttack:Disable()
 end
 RegisterCommand({
 Name = "autoattack",
-Aliases = {"aa", "autoclick"},
+Aliases = {"aut", "autoclick"},
 Description = "Toggles auto-click. Usage: autoattack [delay_in_ms]"
 }, function(args)
 local newDelay = tonumber(args[1])
@@ -1981,6 +1981,149 @@ end)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
+Modules.FireRemotes = {
+State = {
+Enabled = false,
+},
+}
+function Modules.FireRemotes:Initialize()
+    RegisterCommand({
+    Name = "fireremotes",
+    Aliases = {"fremotes", "frem"},
+    Description = "Attempts to fire every discoverable RemoteEvent and RemoteFunction."
+    }, function(args)
+    local CoreGui = game:GetService("CoreGui")
+    local remoteCount = 0
+    local failedCount = 0
+    for _, obj in ipairs(game:GetDescendants()) do
+        if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not obj:IsDescendantOf(CoreGui) then
+            task.spawn(function()
+            local success, err
+            if obj:IsA("RemoteEvent") then
+                success, err = pcall(function()
+                obj:FireServer()
+            end)
+        elseif obj:IsA("RemoteFunction") then
+            success, err = pcall(function()
+            obj:InvokeServer()
+        end)
+    end
+    if success then
+        remoteCount = remoteCount + 1
+    else
+    failedCount = failedCount + 1
+end
+end)
+end
+end
+task.delay(2, function()
+DoNotif("Fired " .. remoteCount .. " remotes.\nFailed: " .. failedCount .. " remotes.")
+end)
+end)
+end
+Modules.RemoveForces = {
+State = {},
+}
+function Modules.RemoveForces:Initialize()
+    RegisterCommand({
+    Name = "deletevelocity",
+    Aliases = {"dv", "removevelocity", "removeforces"},
+    Description = "Removes all force/velocity instances from your character to counter flings or fix physics glitches."
+    }, function(args)
+    local Players = game:GetService("Players")
+    local localPlayer = Players.LocalPlayer
+    local character = localPlayer.Character
+    if not character then
+        return DoNotif("Character not found.", 3)
+    end
+    local forcesRemoved = 0
+    for _, instance in ipairs(character:GetDescendants()) do
+        if  instance:isA("BodyVelocity") or
+            instance:isA("BodyGyro") or
+            instance:isA("RocketPropulsion") or
+            instance:isA("BodyAngularVelocity") or
+            instance:isA("BodyForce") or
+            instance:isA("BodyThrust") or
+            instance:isA("VectorForce") or
+            instance:isA("LineForce") or
+            instance:isA("AngularVelocity")
+            then
+                instance:Destroy()
+                forcesRemoved = forcesRemoved + 1
+            end
+        end
+        DoNotif("Removed " .. forcesRemoved .. " force instances from your character.", 3)
+    end)
+end
+Modules.TeleportToPlace = {
+State = {},
+}
+function Modules.TeleportToPlace:Initialize()
+    RegisterCommand({
+    Name = "teleporttoplace",
+    Aliases = {"toplace", "ttp"},
+    Description = "Teleports you to a specific Roblox place using its ID."
+    }, function(args)
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local localPlayer = Players.LocalPlayer
+    if not args[1] then
+        return DoNotif("Usage: teleporttoplace [PlaceId]", 5)
+    end
+    local placeId = tonumber(args[1])
+    if not placeId then
+        return DoNotif("Invalid PlaceId. It must be a number.", 5)
+    end
+    DoNotif("Attempting to teleport to " .. placeId .. "...", 3)
+    local success, result = pcall(function()
+    TeleportService:Teleport(placeId, localPlayer)
+end)
+if not success then
+    DoNotif("Teleport failed: " .. tostring(result), 5)
+end
+end)
+end
+Modules.ToSpawn = {
+State = {
+Enabled = false,
+},
+}
+function Modules.ToSpawn:Initialize()
+    RegisterCommand({
+    Name = "tospawn",
+    Aliases = {"ts"},
+    Description = "Teleports you to the nearest SpawnLocation."
+    }, function(args)
+    local Players = game:GetService("Players")
+    local Workspace = game:GetService("Workspace")
+    local localPlayer = Players.LocalPlayer
+    local character = localPlayer.Character
+    if not character then
+        return DoNotif("Character not found.", 3)
+    end
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then
+        return DoNotif("HumanoidRootPart not found.", 3)
+    end
+    local closestSpawn = nil
+    local shortestDistance = math.huge
+    local rootPosition = root.Position
+    for _, part in ipairs(Workspace:GetDescendants()) do
+        if part:IsA("SpawnLocation") then
+            local distance = (part.Position - rootPosition).Magnitude
+            if distance < shortestDistance then
+                shortestDistance = distance
+                closestSpawn = part
+            end
+        end
+    end
+    if closestSpawn then
+        root.CFrame = closestSpawn.CFrame * CFrame.new(0, 3, 0)
+    else
+    return DoNotif("No SpawnLocation found in workspace.", 3)
+end
+end)
+end
 Modules.SuperPush = {
 State = {
 IsEnabled = false,
@@ -2058,161 +2201,485 @@ function Modules.SuperPush:_cleanupCharacter(character)
                         end
                     end
                 end
-                Modules.FireRemotes = {
-                State = {
-                Enabled = false,
-                },
-                }
-                function Modules.FireRemotes:Initialize()
-                    RegisterCommand({
-                    Name = "fireremotes",
-                    Aliases = {"fremotes", "frem"},
-                    Description = "Attempts to fire every discoverable RemoteEvent and RemoteFunction."
-                    }, function(args)
-                    local CoreGui = game:GetService("CoreGui")
-                    local remoteCount = 0
-                    local failedCount = 0
-                    for _, obj in ipairs(game:GetDescendants()) do
-                        if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not obj:IsDescendantOf(CoreGui) then
-                            task.spawn(function()
-                            local success, err
-                            if obj:IsA("RemoteEvent") then
-                                success, err = pcall(function()
-                                obj:FireServer()
-                            end)
-                        elseif obj:IsA("RemoteFunction") then
-                            success, err = pcall(function()
-                            obj:InvokeServer()
-                        end)
+                RegisterCommand({
+                Name = "superpush",
+                Aliases = {"bump", "heavy"},
+                Description = "Increases your mass and adds a velocity push when you bump into players."
+                }, function()
+                Modules.SuperPush:Toggle()
+            end)
+            local function DoNotif(message, duration)
+            print("AURA:", message)
+        end
+        Modules.Aura = {
+        State = {
+        Enabled = false,
+        Distance = 20,
+        Connection = nil,
+        Visualizer = nil,
+        },
+        }
+        function Modules.Aura:Disable()
+            if not self.State.Enabled then return end
+                if self.State.Connection then
+                    self.State.Connection:Disconnect()
+                    self.State.Connection = nil
+                end
+                if self.State.Visualizer then
+                    self.State.Visualizer:Destroy()
+                    self.State.Visualizer = nil
+                end
+                self.State.Enabled = false
+                DoNotif("Aura disabled.", 2)
+            end
+            function Modules.Aura:Enable()
+                if self.State.Enabled then return end
+                    if not firetouchinterest then
+                        return DoNotif("This script requires 'firetouchinterest' to function.", 5)
                     end
-                    if success then
-                        remoteCount = remoteCount + 1
+                    local Players = game:GetService("Players")
+                    local RunService = game:GetService("RunService")
+                    local Workspace = game:GetService("Workspace")
+                    self.State.Visualizer = Instance.new("Part")
+                    self.State.Visualizer.Shape = Enum.PartType.Ball
+                    self.State.Visualizer.Size = Vector3.new(self.State.Distance * 2, self.State.Distance * 2, self.State.Distance * 2)
+                    self.State.Visualizer.Transparency = 0.8
+                    self.State.Visualizer.Color = Color3.fromRGB(255, 0, 0)
+                    self.State.Visualizer.Material = Enum.Material.Neon
+                    self.State.Visualizer.Anchored = true
+                    self.State.Visualizer.CanCollide = false
+                    self.State.Visualizer.Parent = Workspace
+                    self.State.Enabled = true
+                    DoNotif("Aura enabled at " .. self.State.Distance .. " studs.", 2)
+                    self.State.Connection = RunService.RenderStepped:Connect(function()
+                    local localPlayer = Players.LocalPlayer
+                    if not localPlayer then return self:Disable() end
+                        local character = localPlayer.Character
+                        local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+                        local tool = character and character:FindFirstChildOfClass("Tool")
+                        local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart"))
+                        if not rootPart or not handle or not self.State.Visualizer then
+                            return self:Disable()
+                        end
+                        self.State.Visualizer.CFrame = rootPart.CFrame
+                        for _, player in ipairs(Players:GetPlayers()) do
+                            if player ~= localPlayer and player.Character then
+                                local targetHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                                local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
+                                if targetHumanoid and targetHumanoid.Health > 0 and targetRoot then
+                                    if (targetRoot.Position - rootPart.Position).Magnitude <= self.State.Distance then
+                                        firetouchinterest(handle, targetRoot, 0)
+                                        task.wait()
+                                        firetouchinterest(handle, targetRoot, 1)
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+                function Modules.Aura:Initialize()
+                    RegisterCommand({
+                    Name = "aura",
+                    Aliases = {},
+                    Description = "Continuously damages nearby players. Optional [distance] argument."
+                    }, function(args)
+                    local dist = tonumber(args[1])
+                    if dist and dist > 0 then
+                        self.State.Distance = dist
+                        DoNotif("Aura distance set to " .. dist, 2)
+                    end
+                    if self.State.Enabled then
+                        self:Disable()
                     else
-                    failedCount = failedCount + 1
+                    self:Disable()
+                    self:Enable()
                 end
             end)
         end
-    end
-    task.delay(2, function()
-    DoNotif("Fired " .. remoteCount .. " remotes.\nFailed: " .. failedCount .. " remotes.")
-end)
-end)
-end
-
-Modules.ToSpawn = {
-State = {
-Enabled = false,
-},
-}
-function Modules.ToSpawn:Initialize()
-    RegisterCommand({
-    Name = "tospawn",
-    Aliases = {"ts"},
-    Description = "Teleports you to the nearest SpawnLocation."
-    }, function(args)
-    local Players = game:GetService("Players")
-    local Workspace = game:GetService("Workspace")
-    local localPlayer = Players.LocalPlayer
-    local character = localPlayer.Character
-    if not character then
-        return DoNotif("Character not found.", 3)
-    end
-    local root = character:FindFirstChild("HumanoidRootPart")
-    if not root then
-        return DoNotif("HumanoidRootPart not found.", 3)
-    end
-    local closestSpawn = nil
-    local shortestDistance = math.huge
-    local rootPosition = root.Position
-    for _, part in ipairs(Workspace:GetDescendants()) do
-        if part:IsA("SpawnLocation") then
-            local distance = (part.Position - rootPosition).Magnitude
-            if distance < shortestDistance then
-                shortestDistance = distance
-                closestSpawn = part
+        Modules.HandleKill = {
+        State = {
+        ActiveLoops = {},
+        },
+        Dependencies = {"Players", "RunService"},
+        }
+        function Modules.HandleKill:StopLoop(targetPlayer)
+            if not self.State.ActiveLoops[targetPlayer] then return end
+                self.State.ActiveLoops[targetPlayer] = nil
+                DoNotif("HandleKill stopped for " .. targetPlayer.Name, 2)
             end
+            function Modules.HandleKill:StartLoop(targetPlayer)
+                if self.State.ActiveLoops[targetPlayer] then return end
+                    local localPlayer = self.Services.Players.LocalPlayer
+                    local character = localPlayer.Character
+                    if not character then return DoNotif("Your character was not found.", 3) end
+                        local tool = character:FindFirstChildOfClass("Tool")
+                        if not tool or not tool:FindFirstChild("Handle") then
+                            return DoNotif("You must be holding a tool with a 'Handle'.", 3)
+                        end
+                        local handle = tool.Handle
+                        local loopThread = coroutine.create(function()
+                        while self.State.ActiveLoops[targetPlayer] and tool.Parent == character and targetPlayer.Character do
+                            local humanoid = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
+                            if not humanoid or humanoid.Health <= 0 then break end
+                                for _, part in ipairs(targetPlayer.Character:GetChildren()) do
+                                    if part:IsA("BasePart") then
+                                        firetouchinterest(handle, part, 0)
+                                        task.wait()
+                                        firetouchinterest(handle, part, 1)
+                                    end
+                                end
+                                self.Services.RunService.Heartbeat:Wait()
+                            end
+                            self.State.ActiveLoops[targetPlayer] = nil
+                        end)
+                        self.State.ActiveLoops[targetPlayer] = loopThread
+                        coroutine.resume(loopThread)
+                        DoNotif("HandleKill initiated on " .. targetPlayer.Name, 2)
+                    end
+                    function Modules.HandleKill:Initialize()
+                        RegisterCommand({
+                        Name = "handlekill",
+                        Aliases = {"hkill"},
+                        Description = "Toggles a kill loop on a player using your equipped tool."
+                        }, function(args)
+                        if not firetouchinterest then
+                            return DoNotif("firetouchinterest is not supported.", 3)
+                        end
+                        if not args[1] then
+                            return DoNotif("Usage: hkill <player>", 3)
+                        end
+                        local targets = getPlr(args[1])
+                        if #targets == 0 then
+                            return DoNotif("No target found.", 3)
+                        end
+                        for _, targetPlayer in ipairs(targets) do
+                            if self.State.ActiveLoops[targetPlayer] then
+                                self:StopLoop(targetPlayer)
+                            else
+                            self:StartLoop(targetPlayer)
+                        end
+                    end
+                end)
+            end
+            Modules.Strengthen = {
+            State = {
+            Enabled = false,
+            Density = 100,
+            OriginalProperties = {},
+            },
+            }
+            function Modules.Strengthen:ApplyToCharacter(character)
+                table.clear(self.State.OriginalProperties)
+                for _, part in ipairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        self.State.OriginalProperties[part] = part.CustomPhysicalProperties
+                        part.CustomPhysicalProperties = PhysicalProperties.new(self.State.Density, 0.3, 0.5)
+                    end
+                end
+            end
+            function Modules.Strengthen:RevertForCharacter()
+                for part, originalProperties in pairs(self.State.OriginalProperties) do
+                    if part and part.Parent then
+                        part.CustomPhysicalProperties = originalProperties
+                    end
+                end
+                table.clear(self.State.OriginalProperties)
+            end
+            function Modules.Strengthen:Initialize()
+                RegisterCommand({
+                Name = "strengthen",
+                Aliases = {"buff"},
+                Description = "Toggles high character density to resist forces. Optional [density] argument."
+                }, function(args)
+                local character = getChar()
+                if not character then
+                    return DoNotif("Character not found.", 3)
+                end
+                local newDensity = tonumber(args[1])
+                if newDensity and newDensity > 0 then
+                    self.State.Density = newDensity
+                    DoNotif("Strengthen density set to " .. self.State.Density, 2)
+                end
+                if self.State.Enabled then
+                    self:RevertForCharacter()
+                    self.State.Enabled = false
+                    DoNotif("Strengthen disabled. Character physics restored.", 2)
+                else
+                self:ApplyToCharacter(character)
+                self.State.Enabled = true
+                DoNotif("Strengthen enabled at density " .. self.State.Density, 2)
+            end
+        end)
+    end
+    Modules.Follow = {
+    State = {
+    Target = nil,
+    PhysicsConnection = nil,
+    Cleanup = {},
+    },
+    Dependencies = {"Players", "RunService"},
+    }
+    function Modules.Follow:Disable()
+        if not self.State.PhysicsConnection then return end
+            self.State.PhysicsConnection:Disconnect()
+            self.State.PhysicsConnection = nil
+            self.State.Target = nil
+            for _, obj in ipairs(self.State.Cleanup) do
+                if obj and obj.Parent then
+                    obj:Destroy()
+                end
+            end
+            table.clear(self.State.Cleanup)
+            DoNotif("Follow has been disabled.", 2)
         end
-    end
-    if closestSpawn then
-        root.CFrame = closestSpawn.CFrame * CFrame.new(0, 3, 0)
-    else
-    return DoNotif("No SpawnLocation found in workspace.", 3)
-end
-end)
-end
-
-RegisterCommand({
-Name = "superpush",
-Aliases = {"bump", "heavy"},
-Description = "Increases your mass and adds a velocity push when you bump into players."
-}, function()
-Modules.SuperPush:Toggle()
-end)
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local localPlayer = Players.LocalPlayer
-Modules.FixCamera = {
-State = {
-Enabled = false,
-Connection = nil,
-OriginalMaxZoom = nil,
-OriginalOcclusionMode = nil,
-}
-}
-RegisterCommand({
-Name = "fixcam",
-Aliases = {"fix", "unlockcam"},
-Description = "Unlocks camera, allows zooming through walls, and forces third-person."
-}, function(args)
-if not localPlayer then return end
-    local self = Modules.FixCamera
-    self.State.Enabled = not self.State.Enabled
-    if self.State.Enabled then
-        self.State.OriginalMaxZoom = localPlayer.CameraMaxZoomDistance
-        self.State.OriginalOcclusionMode = localPlayer.DevCameraOcclusionMode
-        localPlayer.CameraMaxZoomDistance = 10000
-        local success, err = pcall(function()
-        localPlayer.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.None
+        function Modules.Follow:Enable(targetPlayer)
+            self:Disable()
+            local myCharacter = self.Services.Players.LocalPlayer.Character
+            if not myCharacter then return self:Disable() end
+                local myRoot = myCharacter:FindFirstChild("HumanoidRootPart")
+                if not myRoot then return self:Disable() end
+                    self.State.Target = targetPlayer
+                    DoNotif("Now following " .. self.State.Target.Name, 2)
+                    local rootAttachment = Instance.new("Attachment", myRoot)
+                    local targetAttachment = Instance.new("Attachment")
+                    local alignPosition = Instance.new("AlignPosition", myRoot)
+                    alignPosition.Attachment0 = rootAttachment
+                    alignPosition.Attachment1 = targetAttachment
+                    alignPosition.MaxForce = 100000
+                    alignPosition.Responsiveness = 50
+                    alignPosition.Mode = Enum.PositionAlignmentMode.OneAttachment
+                    table.insert(self.State.Cleanup, rootAttachment)
+                    table.insert(self.State.Cleanup, targetAttachment)
+                    table.insert(self.State.Cleanup, alignPosition)
+                    self.State.PhysicsConnection = self.Services.RunService.Heartbeat:Connect(function()
+                    local targetCharacter = self.State.Target and self.State.Target.Character
+                    if not targetCharacter then return self:Disable() end
+                        local targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart")
+                        if not targetRoot then return self:Disable() end
+                            targetAttachment.Parent = targetRoot
+                            targetAttachment.WorldPosition = targetRoot.Position
+                        end)
+                    end
+                    function Modules.Follow:Initialize()
+                        RegisterCommand({
+                        Name = "follow",
+                        Aliases = {"stalk"},
+                        Description = "Follows a player using physics. Run with no arguments to stop."
+                        }, function(args)
+                        if not args[1] then
+                            return self:Disable()
+                        end
+                        local targets = getPlr(args[1])
+                        if #targets > 0 then
+                            self:Enable(targets[1])
+                        else
+                        DoNotif("Target not found.", 3)
+                    end
+                end)
+                RegisterCommand({
+                Name = "unfollow",
+                Aliases = {"unstalk"},
+                Description = "Stops following a player."
+                }, function()
+                self:Disable()
+            end)
+        end
+        Modules.AntiAnchor = {
+        State = {
+        Enabled = false,
+        TrackedParts = setmetatable({}, {__mode="k"}),
+        OriginalProperties = setmetatable({}, {__mode="k"}),
+        Signals = setmetatable({}, {__mode="k"}),
+        CharacterConnections = {},
+        FailsafeConnection = nil,
+        },
+        Dependencies = {"Players", "RunService"},
+        }
+        function Modules.AntiAnchor:Enforce(part)
+            if not (part and part:IsA("BasePart")) then return end
+                if self.State.OriginalProperties[part] == nil then
+                    self.State.OriginalProperties[part] = part.Anchored
+                end
+                self.State.TrackedParts[part] = true
+                if part.Anchored then part.Anchored = false end
+                    if not self.State.Signals[part] then
+                        self.State.Signals[part] = part:GetPropertyChangedSignal("Anchored"):Connect(function()
+                        if self.State.Enabled and part.Anchored then
+                            part.Anchored = false
+                        end
+                    end)
+                end
+            end
+            function Modules.AntiAnchor:ProcessCharacter(character)
+                for _, child in ipairs(character:GetDescendants()) do self:Enforce(child) end
+                    table.insert(self.State.CharacterConnections, character.DescendantAdded:Connect(function(child) self:Enforce(child) end))
+                    table.insert(self.State.CharacterConnections, character.DescendantRemoving:Connect(function(child)
+                    if self.State.Signals[child] then
+                        self.State.Signals[child]:Disconnect()
+                        self.State.Signals[child] = nil
+                    end
+                    self.State.TrackedParts[child] = nil
+                    self.State.OriginalProperties[child] = nil
+                end))
+            end
+            function Modules.AntiAnchor:Enable()
+                if self.State.Enabled then return end
+                    self.State.Enabled = true
+                    local localPlayer = self.Services.Players.LocalPlayer
+                    if localPlayer.Character then self:ProcessCharacter(localPlayer.Character) end
+                        table.insert(self.State.CharacterConnections, localPlayer.CharacterAdded:Connect(function(char) self:ProcessCharacter(char) end))
+                        self.State.FailsafeConnection = self.Services.RunService.Stepped:Connect(function()
+                        for part in pairs(self.State.TrackedParts) do
+                            if part.Anchored then part.Anchored = false end
+                            end
+                        end)
+                        DoNotif("Anti-Anchor enabled.", 2)
+                    end
+                    function Modules.AntiAnchor:Disable()
+                        if not self.State.Enabled then return end
+                            self.State.Enabled = false
+                            for _, conn in ipairs(self.State.CharacterConnections) do conn:Disconnect() end
+                                for _, conn in pairs(self.State.Signals) do conn:Disconnect() end
+                                    if self.State.FailsafeConnection then self.State.FailsafeConnection:Disconnect() end
+                                        for part, originalValue in pairs(self.State.OriginalProperties) do
+                                            if part and part.Parent then part.Anchored = originalValue end
+                                            end
+                                            table.clear(self.State.TrackedParts)
+                                            table.clear(self.State.OriginalProperties)
+                                            table.clear(self.State.Signals)
+                                            table.clear(self.State.CharacterConnections)
+                                            self.State.FailsafeConnection = nil
+                                            DoNotif("Anti-Anchor disabled.", 2)
+                                        end
+                                        function Modules.AntiAnchor:Initialize()
+                                            RegisterCommand({
+                                            Name = "antianchor",
+                                            Aliases = {"aa"},
+                                            Description = "Toggles a robust defense against being anchored."
+                                            }, function()
+                                            self.State.Enabled = not self.State.Enabled
+                                            if self.State.Enabled then self:Enable() else self:Disable() end
+                                            end)
+                                        end
+                                        Modules.RevealInvisible = {
+                                        State = {
+                                        Connection = nil,
+                                        OriginalTransparency = setmetatable({}, {__mode="k"}),
+                                        },
+                                        Dependencies = {"RunService", "Workspace"},
+                                        }
+                                        function Modules.RevealInvisible:Disable()
+                                            if not self.State.Connection then return end
+                                                self.State.Connection:Disconnect()
+                                                self.State.Connection = nil
+                                                for part, originalValue in pairs(self.State.OriginalTransparency) do
+                                                    if part and part.Parent then
+                                                        part.Transparency = originalValue
+                                                    end
+                                                end
+                                                table.clear(self.State.OriginalTransparency)
+                                                DoNotif("Invisible parts have been hidden again.", 2)
+                                            end
+                                            function Modules.RevealInvisible:Enable()
+                                                self:Disable()
+                                                local partsRevealed = 0
+                                                for _, part in ipairs(self.Services.Workspace:GetDescendants()) do
+                                                    if part:IsA("BasePart") and part.Transparency > 0.95 then
+                                                        if self.State.OriginalTransparency[part] == nil then
+                                                            self.State.OriginalTransparency[part] = part.Transparency
+                                                            part.Transparency = 0.5
+                                                            partsRevealed = partsRevealed + 1
+                                                        end
+                                                    end
+                                                end
+                                                DoNotif("Initial scan revealed " .. partsRevealed .. " invisible parts.", 2)
+                                                self.State.Connection = self.Services.RunService.RenderStepped:Connect(function()
+                                                for _, part in ipairs(self.Services.Workspace:GetDescendants()) do
+                                                    if part:IsA("BasePart") and part.Transparency > 0.95 and not self.State.OriginalTransparency[part] then
+                                                        self.State.OriginalTransparency[part] = part.Transparency
+                                                        part.Transparency = 0.5
+                                                    end
+                                                end
+                                            end)
+                                        end
+                                        function Modules.RevealInvisible:Initialize()
+                                            RegisterCommand({
+                                            Name = "invisibleparts",
+                                            Aliases = {"invisparts", "showinvisible"},
+                                            Description = "Toggles the visibility of all invisible parts in the workspace."
+                                            }, function()
+                                            if self.State.Connection then
+                                                self:Disable()
+                                            else
+                                            self:Enable()
+                                        end
+                                    end)
+                                end
+                                local Players = game:GetService("Players")
+                                local RunService = game:GetService("RunService")
+                                local localPlayer = Players.LocalPlayer
+                                Modules.FixCamera = {
+                                State = {
+                                Enabled = false,
+                                Connection = nil,
+                                OriginalMaxZoom = nil,
+                                OriginalOcclusionMode = nil,
+                                }
+                                }
+                                RegisterCommand({
+                                Name = "fixcam",
+                                Aliases = {"fix", "unlockcam"},
+                                Description = "Unlocks camera, allows zooming through walls, and forces third-person."
+                                }, function(args)
+                                if not localPlayer then return end
+                                    local self = Modules.FixCamera
+                                    self.State.Enabled = not self.State.Enabled
+                                    if self.State.Enabled then
+                                        self.State.OriginalMaxZoom = localPlayer.CameraMaxZoomDistance
+                                        self.State.OriginalOcclusionMode = localPlayer.DevCameraOcclusionMode
+                                        localPlayer.CameraMaxZoomDistance = 10000
+                                        local success, err = pcall(function()
+                                        localPlayer.DevCameraOcclusionMode = Enum.DevCameraOcclusionMode.None
+                                    end)
+                                    if not success then
+                                        warn("FixCamera: Failed to set DevCameraOcclusionMode via Enum. Falling back to 0. Error:", err)
+                                        localPlayer.DevCameraOcclusionMode = 0
+                                    end
+                                    self.State.Connection = RunService.RenderStepped:Connect(function()
+                                    if localPlayer.CameraMode ~= Enum.CameraMode.Classic then
+                                        localPlayer.CameraMode = Enum.CameraMode.Classic
+                                    end
+                                end)
+                                DoNotif("Camera override enabled (with wall-zoom).", 3)
+                            else
+                            if self.State.Connection and self.State.Connection.Connected then
+                                self.State.Connection:Disconnect()
+                                self.State.Connection = nil
+                            end
+                            pcall(function()
+                            if self.State.OriginalOcclusionMode ~= nil then
+                                localPlayer.DevCameraOcclusionMode = self.State.OriginalOcclusionMode
+                            end
+                            if self.State.OriginalMaxZoom ~= nil then
+                                localPlayer.CameraMaxZoomDistance = self.State.OriginalMaxZoom
+                            end
+                        end)
+                        self.State.OriginalOcclusionMode = nil
+                        self.State.OriginalMaxZoom = nil
+                        DoNotif("Camera override disabled.", 3)
+                    end
+                end)
+                local function loadstringCmd(url, notif)
+                pcall(function()
+                loadstring(game:HttpGet(url))()
+            end)
+            DoNotif(notif, 3)
+        end
+        RegisterCommand({Name = "touchfling", Aliases = {"fui"}, Description = "Loads the FLING ui"}, function()
+        loadstringCmd("https://raw.githubusercontent.com/miso517/scirpt/refs/heads/main/main.lua", "Fling GUI Loaded")
     end)
-    if not success then
-        warn("FixCamera: Failed to set DevCameraOcclusionMode via Enum. Falling back to 0. Error:", err)
-        localPlayer.DevCameraOcclusionMode = 0
-    end
-    self.State.Connection = RunService.RenderStepped:Connect(function()
-    if localPlayer.CameraMode ~= Enum.CameraMode.Classic then
-        localPlayer.CameraMode = Enum.CameraMode.Classic
-    end
-end)
-DoNotif("Camera override enabled (with wall-zoom).", 3)
-else
-if self.State.Connection and self.State.Connection.Connected then
-    self.State.Connection:Disconnect()
-    self.State.Connection = nil
-end
-pcall(function()
-if self.State.OriginalOcclusionMode ~= nil then
-    localPlayer.DevCameraOcclusionMode = self.State.OriginalOcclusionMode
-end
-if self.State.OriginalMaxZoom ~= nil then
-    localPlayer.CameraMaxZoomDistance = self.State.OriginalMaxZoom
-end
-end)
-self.State.OriginalOcclusionMode = nil
-self.State.OriginalMaxZoom = nil
-DoNotif("Camera override disabled.", 3)
-end
-end)
-local function loadstringCmd(url, notif)
-pcall(function()
-loadstring(game:HttpGet(url))()
-end)
-DoNotif(notif, 3)
-end
-RegisterCommand({Name = "touchfling", Aliases = {"fui"}, Description = "Loads the FLING ui"}, function()
-loadstringCmd("https://raw.githubusercontent.com/miso517/scirpt/refs/heads/main/main.lua", "Fling GUI Loaded")
-end)
-RegisterCommand({Name = "teleporter", Aliases = {"tpui"}, Description = "Loads the Game Universe."}, function()
-loadstringCmd("https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/main/Universe%20Viewer", "Universe Initialized")
+    RegisterCommand({Name = "teleporter", Aliases = {"tpui"}, Description = "Loads the Game Universe."}, function()
+    loadstringCmd("https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/main/Universe%20Viewer", "Universe Initialized")
 end)
 RegisterCommand({Name = "wallwalk", Aliases = {"ww"}, Description = "Walk On Walls"}, function()
 loadstringCmd("https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/main/WallWalk.lua", "Loaded!")
@@ -2262,25 +2729,24 @@ function processCommand(message)
                 end
                 return true
             end
-
-for moduleName, module in pairs(Modules) do
-    if type(module) == "table" and type(module.Initialize) == "function" then
-        pcall(function()
-            module:Initialize()
-            print("Initialized module:", moduleName)
-        end)
-    end
-end
-            Modules.CommandBar:Initialize()
-            Modules.CommandList:Initialize()
-            local TextChatService
-            local success = pcall(function() TextChatService = game:GetService("TextChatService") end)
-            if success and TextChatService then
-                TextChatService.OnSendingMessage = function(message)
-                if processCommand(message.Text) then return nil end
-                    return {}
-                end
-            else
-            LocalPlayer.Chatted:Connect(processCommand)
+            for moduleName, module in pairs(Modules) do
+                if type(module) == "table" and type(module.Initialize) == "function" then
+                    pcall(function()
+                    module:Initialize()
+                    print("Initialized module:", moduleName)
+                end)
+            end
         end
-        DoNotif("ZukaHub Initialized. Press ; to open.", 3)
+        Modules.CommandBar:Initialize()
+        Modules.CommandList:Initialize()
+        local TextChatService
+        local success = pcall(function() TextChatService = game:GetService("TextChatService") end)
+        if success and TextChatService then
+            TextChatService.OnSendingMessage = function(message)
+            if processCommand(message.Text) then return nil end
+                return {}
+            end
+        else
+        LocalPlayer.Chatted:Connect(processCommand)
+    end
+    DoNotif("ZukaHub Initialized. Press ; to open.", 3)
