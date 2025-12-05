@@ -2430,56 +2430,77 @@ function Modules.SuperPush:_cleanupCharacter(character)
                         end
                     end)
                 end
-                Modules.Strengthen = {
-                State = {
-                Enabled = false,
-                Density = 100,
-                OriginalProperties = {},
-                },
-                }
-                function Modules.Strengthen:ApplyToCharacter(character)
-                    table.clear(self.State.OriginalProperties)
-                    for _, part in ipairs(character:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            self.State.OriginalProperties[part] = part.CustomPhysicalProperties
-                            part.CustomPhysicalProperties = PhysicalProperties.new(self.State.Density, 0.3, 0.5)
-                        end
-                    end
-                end
-                function Modules.Strengthen:RevertForCharacter()
-                    for part, originalProperties in pairs(self.State.OriginalProperties) do
-                        if part and part.Parent then
-                            part.CustomPhysicalProperties = originalProperties
-                        end
-                    end
-                    table.clear(self.State.OriginalProperties)
-                end
-                function Modules.Strengthen:Initialize()
-                    RegisterCommand({
-                    Name = "strengthen",
-                    Aliases = {"buff"},
-                    Description = "Toggles high character density to resist forces. Optional [density] argument."
-                    }, function(args)
-                    local character = getChar()
-                    if not character then
-                        return DoNotif("Character not found.", 3)
-                    end
-                    local newDensity = tonumber(args[1])
-                    if newDensity and newDensity > 0 then
-                        self.State.Density = newDensity
-                        DoNotif("Strengthen density set to " .. self.State.Density, 2)
-                    end
-                    if self.State.Enabled then
-                        self:RevertForCharacter()
-                        self.State.Enabled = false
-                        DoNotif("Strengthen disabled. Character physics restored.", 2)
-                    else
-                    self:ApplyToCharacter(character)
-                    self.State.Enabled = true
-                    DoNotif("Strengthen enabled at density " .. self.State.Density, 2)
-                end
-            end)
+-- // =================================================================================
+-- // Strengthen Module (Adapted for Zuka/Xeno Framework)
+-- // =================================================================================
+Modules.Strengthen = {
+    State = {
+        Enabled = false,
+        Density = 100,
+        OriginalProperties = {},
+    },
+}
+
+-- Applies high-density physical properties to a character model.
+function Modules.Strengthen:ApplyToCharacter(character)
+    table.clear(self.State.OriginalProperties)
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            self.State.OriginalProperties[part] = part.CustomPhysicalProperties
+            part.CustomPhysicalProperties = PhysicalProperties.new(self.State.Density, 0.3, 0.5)
         end
+    end
+end
+
+-- Reverts all physical properties to their original state.
+function Modules.Strengthen:RevertForCharacter()
+    -- We must get the character again in case they have respawned.
+    local character = Players.LocalPlayer.Character
+    if not character then return end
+    
+    for part, originalProperties in pairs(self.State.OriginalProperties) do
+        if part and part.Parent and part:IsDescendantOf(character) then
+            part.CustomPhysicalProperties = originalProperties
+        end
+    end
+    table.clear(self.State.OriginalProperties)
+end
+
+-- Initializes the module and registers its chat command.
+function Modules.Strengthen:Initialize()
+    -- ARCHITECT'S NOTE: This is the critical fix. We capture the module's 'self'
+    -- into a variable 'module'. The callback function below is a closure that
+    -- will have access to 'module', solving the 'self is nil' error.
+    local module = self
+
+    RegisterCommand({
+        Name = "strengthen",
+        Aliases = {"buff", "density"},
+        Description = "Toggles high character density to resist forces. Optional [density] argument."
+    }, function(args)
+        local character = Players.LocalPlayer.Character
+        if not character then
+            return DoNotif("Character not found.", 3)
+        end
+        
+        local newDensity = tonumber(args[1])
+        if newDensity and newDensity > 0 then
+            module.State.Density = newDensity
+            DoNotif("Strengthen density set to " .. module.State.Density, 2)
+        end
+
+        -- Use the captured 'module' variable instead of the non-existent 'self'.
+        if module.State.Enabled then
+            module:RevertForCharacter()
+            module.State.Enabled = false
+            DoNotif("Strengthen disabled. Character physics restored.", 2)
+        else
+            module:ApplyToCharacter(character)
+            module.State.Enabled = true
+            DoNotif("Strengthen enabled at density " .. module.State.Density, 2)
+        end
+    end)
+end
         Modules.Follow = {
         State = {
         Target = nil,
