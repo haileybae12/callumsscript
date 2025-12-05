@@ -454,7 +454,7 @@ function Modules.CommandBar:_ClearSuggestions()
         container.AnchorPoint = Vector2.new(0.5, 0.5)
         container.Position = UDim2.fromScale(0.5, 0.82)
         container.Size = UDim2.new(1, 0, 0, 38)
-        container.BackgroundTransparency = 1
+        container.BackgroundTransparency = 1.5
         container.Parent = ui
         self.State.Container = container
         local inputFrame = Instance.new("Frame")
@@ -473,10 +473,10 @@ function Modules.CommandBar:_ClearSuggestions()
         textBox.AnchorPoint = Vector2.new(0.5, 0.5)
         textBox.BackgroundTransparency = 1
         textBox.Font = Theme.MainFont
-        textBox.PlaceholderText = ";"
+        textBox.PlaceholderText = "type here"
         textBox.PlaceholderColor3 = Theme.PlaceholderTextColor
         textBox.TextColor3 = Theme.InputTextColor
-        textBox.TextSize = 16
+        textBox.TextSize = 18
         textBox.ClearTextOnFocus = true
         textBox.Parent = inputFrame
         self.State.TextBox = textBox
@@ -521,7 +521,7 @@ function Modules.CommandBar:_ClearSuggestions()
     suggestionsFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
 end)
 self.State.IsScriptUpdatingText = false
-local MAX_SUGGESTIONS = 2
+local MAX_SUGGESTIONS = 5
 local function createSuggestionButton(text)
 local button = Instance.new("TextButton")
 button.Name, button.Text, button.Parent = text, text, self.State.SuggestionsFrame
@@ -1021,79 +1021,142 @@ function Modules.HighlightPlayer:ApplyHighlight(character)
                                             }, function()
                                             Modules.AnimationFreezer:Toggle()
                                         end)
-                                        Modules.AutoDecompiler = {
-                                        State = {
-                                        Enabled = false,
-                                        IsDecompilerLoaded = false,
-                                        Connections = {}
-                                        }
-                                        }
-                                        local function loadKonstant()
-                                        local self = Modules.AutoDecompiler
-                                        if self.State.IsDecompilerLoaded then return true end
-                                            local konstantURL = "https://raw.githubusercontent.com/roblox-exploitation/Konstant/main/source.lua"
-                                            local success, response = pcall(function()
-                                            return game:HttpGet(konstantURL)
-                                        end)
-                                        if not success or not response then
-                                            warn("AutoDecompiler: HttpGet failed. Could not fetch Konstant source. Error:", tostring(response))
-                                            return false
-                                        end
-                                        local loadedFunc, loadError = loadstring(response)
-                                        if not loadedFunc then
-                                            warn("AutoDecompiler: loadstring failed. The source might be invalid. Error:", tostring(loadError))
-                                            return false
-                                        end
-                                        getgenv().konstant_decompile = loadedFunc()
-                                        if getgenv().konstant_decompile then
-                                            print("Konstant decompiler loaded successfully.")
-                                            self.State.IsDecompilerLoaded = true
-                                            return true
-                                        else
-                                        warn("AutoDecompiler: Failed to initialize Konstant after loading.")
-                                        return false
-                                    end
-                                end
-                                RegisterCommand({
-                                Name = "autodecompile",
-                                Aliases = {"adecompile", "konstantdecompile"},
-                                Description = "Automatically decompiles new and existing scripts using Konstant."
-                                }, function(args)
-                                local self = Modules.AutoDecompiler
-                                self.State.Enabled = not self.State.Enabled
-                                if self.State.Enabled then
-                                    if not loadKonstant() then
-                                        DoNotif("Failed to load Konstant decompiler.", 5)
-                                        self.State.Enabled = false
-                                        return
-                                    end
-                                    DoNotif("Auto Decompiler Enabled. Performing initial sweep...", 5)
-                                    task.spawn(function()
-                                    for _, descendant in ipairs(game:GetDescendants()) do
-                                        if descendant:IsA("LuaSourceContainer") then
-                                            pcall(getgenv().konstant_decompile, descendant)
-                                            task.wait()
-                                        end
-                                    end
-                                    print("Initial script sweep completed.")
-                                end)
-                                local conn = game.DescendantAdded:Connect(function(descendant)
-                                if descendant:IsA("LuaSourceContainer") then
-                                    print("New script detected:", descendant:GetFullName())
-                                    pcall(getgenv().konstant_decompile, descendant)
-                                end
-                            end)
-                            table.insert(self.State.Connections, conn)
-                        else
-                        for _, connection in ipairs(self.State.Connections) do
-                            if connection.Connected then
-                                connection:Disconnect()
-                            end
-                        end
-                        self.State.Connections = {}
-                        DoNotif("Auto Decompiler Disabled.", 3)
-                    end
-                end)
+Modules.AutoDecompiler = {
+    State = {
+        IsEnabled = false,
+        IsReady = false, -- Tracks if dependencies are met
+        Connections = {},
+        LastAPICall = 0 -- For API rate limiting
+    },
+    API_URL = "http://api.plusgiant5.com"
+}
+
+-- Private method to prepare the decompiler and check for executor functions.
+function Modules.AutoDecompiler:_prepareDecompiler()
+    if self.State.IsReady then return true end
+
+    -- ARCHITECT'S NOTE: This module is now dependent on the executor providing these
+    -- specific global functions. This check ensures it fails gracefully if they are absent.
+    if not getscriptbytecode or not request then
+        warn("AutoDecompiler Error: 'getscriptbytecode' and/or 'request' are not available in this environment.")
+        return false
+    end
+
+    print("AutoDecompiler: Executor dependencies found. Ready.")
+    self.State.IsReady = true
+    return true
+end
+
+-- Private method to handle the API call for a single script.
+function Modules.AutoDecompiler:_decompileViaAPI(scriptObject)
+    local success, bytecode = pcall(getscriptbytecode, scriptObject)
+    if not success then
+        warn("AutoDecompiler:", scriptObject:GetFullName(), "- Failed to get bytecode:", tostring(bytecode))
+        return nil -- Return nil on failure
+    end
+
+    -- Enforce the rate limit from the original script.
+    local timeElapsed = os.clock() - self.State.LastAPICall
+    if timeElapsed < 0.5 then
+        task.wait(0.5 - timeElapsed)
+    end
+    
+    -- Perform the web request.
+    local success, httpResult = pcall(request, {
+        Url = self.API_URL .. "/konstant/decompile",
+        Body = bytecode,
+        Method = "POST",
+        Headers = { ["Content-Type"] = "text/plain" }
+    })
+    
+    self.State.LastAPICall = os.clock()
+
+    if not success then
+        warn("AutoDecompiler: request() function failed:", tostring(httpResult))
+        return nil
+    end
+
+    if httpResult and httpResult.StatusCode == 200 then
+        return httpResult.Body
+    else
+        warn("AutoDecompiler: API returned non-200 status:", httpResult.StatusCode, httpResult.Body)
+        return nil
+    end
+end
+
+-- Manages the disabling of the module.
+function Modules.AutoDecompiler:Disable()
+    DoNotif("Auto Decompiler Disabled.", 3)
+    for _, connection in ipairs(self.State.Connections) do
+        if connection.Connected then
+            connection:Disconnect()
+        end
+    end
+    table.clear(self.State.Connections)
+end
+
+-- Manages the enabling of the module.
+function Modules.AutoDecompiler:Enable()
+    if not self:_prepareDecompiler() then
+        DoNotif("Decompiler dependencies not met. Check console.", 5)
+        self.State.Enabled = false -- Revert state on failure
+        return
+    end
+
+    DoNotif("Auto Decompiler Enabled. Sweeping existing scripts...", 4)
+    
+    local function processScript(script)
+        local decompiledSource = self:_decompileViaAPI(script)
+        if decompiledSource then
+            -- Attempt to apply the decompiled source back to the script.
+            local success, err = pcall(function() script.Source = decompiledSource end)
+            if not success then
+                warn("Could not set source for", script:GetFullName(), "- it may be read-only. Error:", err)
+            end
+        end
+    end
+    
+    task.spawn(function()
+        for _, descendant in ipairs(game:GetDescendants()) do
+            if descendant:IsA("LuaSourceContainer") then
+                processScript(descendant)
+                task.wait() -- Yield to prevent freezing
+            end
+        end
+        print("Initial script sweep completed.")
+    end)
+
+    local conn = game.DescendantAdded:Connect(function(descendant)
+        if descendant:IsA("LuaSourceContainer") then
+            print("New script detected:", descendant:GetFullName())
+            processScript(descendant)
+        end
+    end)
+    table.insert(self.State.Connections, conn)
+end
+
+-- Central toggle function to handle state changes.
+function Modules.AutoDecompiler:Toggle()
+    self.State.Enabled = not self.State.Enabled
+    if self.State.Enabled then
+        self:Enable()
+    else
+        self:Disable()
+    end
+end
+
+-- Initializes the module and registers the command.
+function Modules.AutoDecompiler:Initialize()
+    local module = self -- Capture 'self' for the closure.
+    
+    RegisterCommand({
+        Name = "autodecompile",
+        Aliases = {"adecompile", "decompile"},
+        Description = "Automatically decompiles scripts using a bytecode API."
+    }, function(args)
+        module:Toggle()
+    end)
+end
                 local Players = game:GetService("Players")
                 local RunService = game:GetService("RunService")
                 Modules.RespawnAtDeath = {
@@ -2431,12 +2494,315 @@ function Modules.SuperPush:_cleanupCharacter(character)
                     end)
                 end
 -- // =================================================================================
--- // Strengthen Module (Adapted for Zuka/Xeno Framework)
+Modules.RemoteSpy = {
+    State = {
+        IsEnabled = false,
+        UI = nil,
+        OriginalNamecall = nil,
+        BlockedRemotes = {}
+    }
+}
+
+function Modules.RemoteSpy:Toggle()
+    -- If the module is already enabled, we run the cleanup/disable logic.
+    if self.State.IsEnabled then
+        pcall(function()
+            -- CRITICAL: Restore the original __namecall to prevent instability and errors.
+            local mt = getrawmetatable(game)
+            if mt and self.State.OriginalNamecall then
+                setreadonly(mt, false)
+                mt.__namecall = self.State.OriginalNamecall
+                setreadonly(mt, true)
+            end
+            
+            -- Destroy the UI and clean up state references.
+            if self.State.UI then
+                self.State.UI:Destroy()
+            end
+        end)
+        
+        -- Reset state for a clean re-toggle.
+        self.State.IsEnabled = false
+        self.State.UI = nil
+        self.State.OriginalNamecall = nil
+        table.clear(self.State.BlockedRemotes)
+        
+        -- Assuming 'DoNotif' is a global notification function available in your admin.
+        DoNotif("RemoteSpy Disabled.", 2)
+        return
+    end
+
+    -- If the module is not enabled, we run the creation/enable logic.
+    self.State.IsEnabled = true
+    DoNotif("RemoteSpy Enabled.", 2)
+
+    --// Services (defined locally to the function scope)
+    local CoreGui = game:GetService("CoreGui")
+    local UserInputService = game:GetService("UserInputService")
+
+    --// Configuration
+    local CONFIG = {
+        UI_TITLE = "Callum's RemoteSpy",
+        PRIMARY_COLOR = Color3.fromRGB(0, 255, 255),
+        BACKGROUND_COLOR = Color3.fromRGB(30, 30, 40),
+        FONT = Enum.Font.GothamSemibold
+    }
+
+    --// Main Container
+    local remoteSpyGui = Instance.new("ScreenGui")
+    remoteSpyGui.Name = "RemoteSpy_" .. math.random(1000, 9999)
+    remoteSpyGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    remoteSpyGui.ResetOnSpawn = false
+    self.State.UI = remoteSpyGui -- Store reference in state
+
+    --// UI Creation [Begin] (Standard UI construction)
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.fromOffset(500, 350)
+    mainFrame.Position = UDim2.fromScale(0.5, 0.5)
+    mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    mainFrame.BackgroundColor3 = CONFIG.BACKGROUND_COLOR
+    mainFrame.BorderSizePixel = 0
+    mainFrame.ClipsDescendants = true
+    mainFrame.Parent = remoteSpyGui
+
+    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 6)
+    local stroke = Instance.new("UIStroke", mainFrame)
+    stroke.Color = CONFIG.PRIMARY_COLOR
+    stroke.Thickness = 1.5
+    stroke.Transparency = 0.4
+
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, 30)
+    titleBar.BackgroundColor3 = CONFIG.PRIMARY_COLOR
+    titleBar.BackgroundTransparency = 0.85
+    titleBar.Parent = mainFrame
+
+    local titleLabel = Instance.new("TextLabel", titleBar)
+    titleLabel.Size = UDim2.new(1, -60, 1, 0)
+    titleLabel.Position = UDim2.fromOffset(10, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Font = CONFIG.FONT
+    titleLabel.Text = CONFIG.UI_TITLE
+    titleLabel.TextColor3 = Color3.new(1, 1, 1)
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.TextSize = 16
+
+    local exitButton = Instance.new("TextButton", titleBar)
+    exitButton.Size = UDim2.fromOffset(30, 30)
+    exitButton.Position = UDim2.new(1, 0, 0, 0)
+    exitButton.AnchorPoint = Vector2.new(1, 0)
+    exitButton.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    exitButton.BackgroundTransparency = 0.5
+    exitButton.Font = CONFIG.FONT
+    exitButton.Text = "X"
+    exitButton.TextColor3 = Color3.new(1, 1, 1)
+
+    local minimizeButton = Instance.new("TextButton", titleBar)
+    minimizeButton.Size = UDim2.fromOffset(30, 30)
+    minimizeButton.Position = UDim2.new(1, -30, 0, 0)
+    minimizeButton.AnchorPoint = Vector2.new(1, 0)
+    minimizeButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    minimizeButton.BackgroundTransparency = 0.5
+    minimizeButton.Font = CONFIG.FONT
+    minimizeButton.Text = "-"
+    minimizeButton.TextColor3 = Color3.new(1, 1, 1)
+
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Size = UDim2.new(1, 0, 1, -30)
+    contentFrame.Position = UDim2.fromOffset(0, 30)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = mainFrame
+
+    local scrollingFrame = Instance.new("ScrollingFrame")
+    scrollingFrame.Size = UDim2.new(1, -10, 1, -10)
+    scrollingFrame.Position = UDim2.fromScale(0.5, 0.5)
+    scrollingFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    scrollingFrame.BackgroundColor3 = CONFIG.BACKGROUND_COLOR
+    scrollingFrame.BackgroundTransparency = 0.5
+    scrollingFrame.BorderSizePixel = 0
+    scrollingFrame.ScrollBarThickness = 5
+    scrollingFrame.Parent = contentFrame
+
+    local listLayout = Instance.new("UIListLayout", scrollingFrame)
+    listLayout.Padding = UDim.new(0, 5)
+
+    local entryTemplate = Instance.new("Frame")
+    entryTemplate.Name = "EntryTemplate"
+    entryTemplate.Size = UDim2.new(1, -4, 0, 60)
+    entryTemplate.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    entryTemplate.BorderSizePixel = 0
+
+    local pathLabel = Instance.new("TextLabel", entryTemplate)
+    pathLabel.Size = UDim2.new(1, -10, 0, 20)
+    pathLabel.Position = UDim2.fromOffset(5, 2)
+    pathLabel.BackgroundTransparency = 1
+    pathLabel.Font = Enum.Font.Code
+    pathLabel.TextColor3 = CONFIG.PRIMARY_COLOR
+    pathLabel.TextXAlignment = Enum.TextXAlignment.Left
+    pathLabel.TextSize = 13
+    pathLabel.ClipsDescendants = true
+
+    local argsLabel = Instance.new("TextLabel", entryTemplate)
+    argsLabel.Size = UDim2.new(1, -10, 0, 14)
+    argsLabel.Position = UDim2.fromOffset(5, 22)
+    argsLabel.BackgroundTransparency = 1
+    argsLabel.Font = Enum.Font.Code
+    argsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    argsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    argsLabel.TextSize = 12
+    argsLabel.ClipsDescendants = true
+
+    local fireButton = Instance.new("TextButton", entryTemplate)
+    fireButton.Size = UDim2.fromOffset(60, 20)
+    fireButton.Position = UDim2.new(1, -135, 1, -25)
+    fireButton.AnchorPoint = Vector2.new(0, 1)
+    fireButton.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+    fireButton.Font = Enum.Font.Gotham
+    fireButton.Text = "Fire"
+    fireButton.TextColor3 = Color3.white
+
+    local blockButton = Instance.new("TextButton", entryTemplate)
+    blockButton.Size = UDim2.fromOffset(60, 20)
+    blockButton.Position = UDim2.new(1, -65, 1, -25)
+    blockButton.AnchorPoint = Vector2.new(0, 1)
+    blockButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    blockButton.Font = Enum.Font.Gotham
+    blockButton.Text = "Block"
+    blockButton.TextColor3 = Color3.white
+    --// UI Creation [End]
+    
+    --// UI Logic
+    local module = self -- Capture self for use in event connections
+    
+    exitButton.MouseButton1Click:Connect(function()
+        module:Toggle() -- This now calls the central cleanup logic.
+    end)
+    
+    do -- Minimize Logic Scope
+        local isMinimized = false
+        minimizeButton.MouseButton1Click:Connect(function()
+            isMinimized = not isMinimized
+            contentFrame.Visible = not isMinimized
+            minimizeButton.Text = isMinimized and "+" or "-"
+            mainFrame.Size = isMinimized and UDim2.fromOffset(200, 30) or UDim2.fromOffset(500, 350)
+        end)
+    end
+    
+    do -- Dragging Logic Scope
+        titleBar.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                local dragStart = input.Position
+                local startPos = mainFrame.Position
+                local moveConn, endConn
+                moveConn = UserInputService.InputChanged:Connect(function(moveInput)
+                    if moveInput.UserInputType == Enum.UserInputType.MouseMovement then
+                        local delta = moveInput.Position - dragStart
+                        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                    end
+                end)
+                endConn = UserInputService.InputEnded:Connect(function(endInput)
+                    if endInput.UserInputType == Enum.UserInputType.MouseButton1 then
+                        moveConn:Disconnect()
+                        endConn:Disconnect()
+                    end
+                end)
+            end
+        end)
+    end
+    
+    --// Core Spy Logic
+    local function serializeArguments(args)
+        local serialized = {}
+        for _, v in ipairs(args) do
+            local t = typeof(v)
+            if t == "string" then table.insert(serialized, string.format("%q", v))
+            elseif t == "Instance" then table.insert(serialized, v:GetFullName())
+            elseif t == "table" then table.insert(serialized, "{...}")
+            else table.insert(serialized, tostring(v)) end
+        end
+        return "{" .. table.concat(serialized, ", ") .. "}"
+    end
+    
+    local function logRemote(remote, args)
+        local fullName = remote:GetFullName()
+        local entry = entryTemplate:Clone()
+        local remoteType = remote:IsA("RemoteEvent") and "EVENT" or "FUNCTION"
+
+        entry.pathLabel.Text = string.format("[%s] %s", remoteType, fullName)
+        entry.argsLabel.Text = serializeArguments(args)
+        entry.Parent = scrollingFrame
+
+        entry.fireButton.MouseButton1Click:Connect(function()
+            if remote and remote.Parent then
+                if remoteType == "EVENT" then
+                    remote:FireServer(unpack(args))
+                else
+                    pcall(remote.InvokeServer, remote, unpack(args))
+                end
+            end
+        end)
+
+        entry.blockButton.MouseButton1Click:Connect(function()
+            module.State.BlockedRemotes[fullName] = true
+            entry.blockButton.Text = "Blocked"
+            entry.blockButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+            entry.blockButton.AutoButtonColor = false
+        end)
+        
+        scrollingFrame.CanvasPosition = Vector2.new(0, listLayout.AbsoluteContentSize.Y)
+    end
+    
+    -- The __namecall hook setup
+    local mt = getrawmetatable(game)
+    self.State.OriginalNamecall = mt.__namecall
+    
+    setreadonly(mt, false)
+    mt.__namecall = function(...)
+        local args = {...}
+        local selfArg = args[1]
+        local method = getnamecallmethod()
+        
+        if (selfArg:IsA("RemoteEvent") and method == "FireServer") or (selfArg:IsA("RemoteFunction") and method == "InvokeServer") then
+            local fullName = selfArg:GetFullName()
+            
+            if module.State.BlockedRemotes[fullName] then
+                return
+            end
+            
+            local callArgs = {}
+            for i = 2, #args do table.insert(callArgs, args[i]) end
+            logRemote(selfArg, callArgs)
+        end
+        
+        return module.State.OriginalNamecall(...)
+    end
+    setreadonly(mt, true)
+    
+    -- Finally, parent the GUI to the CoreGui
+    remoteSpyGui.Parent = CoreGui
+end
+
+function Modules.RemoteSpy:Initialize()
+    -- Capture 'self' into a local variable for the closure. This is a robust
+    -- pattern that prevents scope issues with callbacks.
+    local module = self
+    
+    RegisterCommand({
+        Name = "remotespy",
+        Aliases = {"rspy", "spy"},
+        Description = "Toggles a UI to inspect and block remote events/functions."
+    }, function(args)
+        -- The command simply calls the central Toggle method.
+        module:Toggle()
+    end)
+end
+
 -- // =================================================================================
+
 Modules.Strengthen = {
     State = {
         Enabled = false,
-        Density = 100,
+        Density = 1100,
         OriginalProperties = {},
     },
 }
@@ -2795,7 +3161,7 @@ RegisterCommand({Name = "reload", Aliases = {"update", "exec"}, Description = "R
 RegisterCommand({Name = "xenodg", Aliases = {"downgrade", "badexec"}, Description = "Reloads and downgrades the admin script because xeno shits itself using hooks."}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/Main.lua", "Reloading xeno port from source...") end)
 RegisterCommand({Name = "zoneui", Aliases = {"guns"}, Description = "Loads the Best Gun Giver for Zombie Zone" }, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/ZombieZone.lua", "Loaded") end)
 RegisterCommand({Name = "ibtools", Aliases = {"btools"}, Description = "Upgraded Gui For Btools"}, function() loadstringCmd("https://raw.githubusercontent.com/legalize8ga-maker/PublicReleaseLua/refs/heads/main/ibtools.lua", "Loading Revamped Btools Gui") end)
-RegisterCommand({Name = "rspy", Aliases = {"spy"}, Description = "Warning: may crash on xeno"}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/remotes.lua", "Loading SimpleSpy...") end)
+RegisterCommand({Name = "ketamine", Aliases = {"kspy"}, Description = "Warning: may crash on xeno"}, function() loadstringCmd("https://raw.githubusercontent.com/haileybae12/callumsscript/refs/heads/main/remotes.lua", "Loading SimpleSpy...") end)
 RegisterCommand({Name = "nocooldown", Aliases = {"ncd"}, Description = "Warning: Broken due to xeno."}, function() loadstringCmd("https://raw.githubusercontent.com/legalize8ga-maker/PublicReleaseLua/refs/heads/main/NocooldownsZombieUpd3.txt", "Loading Cooldownremover...") end)
 RegisterCommand({Name = "scripts", Aliases = {"scriptsearch"}, Description = "May or may not work.."}, function() loadstringCmd("https://raw.githubusercontent.com/bloxtech1/luaprojects2/refs/heads/main/scriptsearcher.lua", "Loading Scripts.") end)
 RegisterCommand({Name = "attach", Aliases = {"glue"}, Description = "Old script for attaching to a target player."}, function() loadstringCmd("https://raw.githubusercontent.com/bloxtech1/luaprojects2/refs/heads/main/flingaddon.lua", "Loading dropdown..") end)
