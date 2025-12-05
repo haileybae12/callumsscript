@@ -2789,7 +2789,7 @@ function Modules.RemoteSpy:Initialize()
     
     RegisterCommand({
         Name = "remotespy",
-        Aliases = {"rspy", "spy"},
+        Aliases = {"rspy"},
         Description = "Toggles a UI to inspect and block remote events/functions."
     }, function(args)
         -- The command simply calls the central Toggle method.
@@ -3170,6 +3170,7 @@ RegisterCommand({Name = "scriptblox", Aliases = {}, Description = "Loads the scr
 RegisterCommand({Name = "freakyfling", Aliases = {}, Description = "Loads the Kawaii. GUI"}, function() loadstringCmd("https://raw.githubusercontent.com/hellohellohell012321/KAWAII-FREAKY-FLING/main/kawaii_freaky_fling.lua", "Loading GUI..") end)
 RegisterCommand({Name = "rem", Aliases = {}, Description = "In game exploit creation kit.."}, function() loadstringCmd("https://e-vil.com/anbu/rem.lua", "Loading Rem.") end)
 RegisterCommand({Name = "copyconsole", Aliases = {copy}, Description = "In game exploit creation kit.."}, function() loadstringCmd("https://raw.githubusercontent.com/scriptlisenbe-stack/luaprojectse3/refs/heads/main/consolecopy.lua", "Copy Console Activated.") end)
+RegisterCommand({Name = "simplespy", Aliases = {"ispy"}, Description = "Remote Functions"}, function() loadstringCmd("https://raw.githubusercontent.com/ltseverydayyou/uuuuuuu/main/simplee%20spyyy%20mobilee", "Loading SimpleSpy...") end)
 function processCommand(message)
     if not message:sub(1, #Prefix) == Prefix then return false end
         local args = {}
