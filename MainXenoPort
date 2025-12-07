@@ -336,7 +336,7 @@ function Modules.CommandList:Populate()
         listLayout.Padding = UDim.new(0, 8)
         table.sort(CommandInfo, function(a, b) return a.Name < b.Name end)
         local totalHeight = 0
-        local textBoundsWidth = scrollingFrame.AbsoluteSize.X - 10
+        local textBoundsWidth = scrollingFrame.AbsoluteSize.X - 11
         for _, info in ipairs(CommandInfo) do
             local entry = Instance.new("TextLabel")
             entry.Name = info.Name
@@ -351,12 +351,12 @@ function Modules.CommandList:Populate()
             end
             local description = info.Description or "No description."
             local richTextString = string.format(
-            "<b><font color='#00FFFF'>;%s</font></b> %s\n<font size='13' color='#DDDDDD'>%s</font>",
+            "<b><font color='#00FFFF'>;%s</font></b> %s\n<font size='17' color='#DDDDDD'>%s</font>",
             info.Name, aliases, description
             )
             entry.Text = richTextString
             local requiredSize = TextService:GetTextSize(richTextString, 14, entry.Font, Vector2.new(textBoundsWidth, 2000))
-            local textHeight = requiredSize.Y + 5
+            local textHeight = requiredSize.Y + 3
             entry.Size = UDim2.new(1, 0, 0, textHeight)
             entry.Parent = scrollingFrame
             totalHeight = totalHeight + textHeight + listLayout.Padding.Offset
@@ -1504,175 +1504,302 @@ Description = "Prevents flinging and disables collision with other players."
 Modules.FlingProtection:Toggle()
 end)
 Modules.Reach = {
-State = {
-IsEnabled = false,
-ToolName = nil,
-PartName = nil,
-ReachType = nil,
-ReachSize = nil,
-UI = nil
-},
-Connections = {}
+    Connections = {},
+    State = {
+        IsEnabled = false,
+        ActiveTool = nil,      -- The tool currently being held
+        ModifiedPart = nil,    -- The part currently being modified
+        
+        -- Persistent State: These store the user's choice across resets.
+        PersistentToolName = nil,
+        PersistentPartName = nil,
+        ReachType = nil,
+        ReachSize = nil,
+        
+        UI = {
+            ScreenGui = nil,
+            Frame = nil,
+            ScrollingFrame = nil,
+            CloseButton = nil
+        }
+    }
 }
-function Modules.Reach:_getToolByName(toolName)
-    if not toolName then return nil end
-        local character = LocalPlayer.Character
-        if character and character:FindFirstChild(toolName) and character[toolName]:IsA("Tool") then
-            return character[toolName]
+
+-- Private Constants
+local ATTRIBUTE_OG_SIZE = "OriginalSize"
+local SELECTION_BOX_NAME = "ReachSelectionBox"
+
+--// PRIVATE METHODS: CORE LOGIC //--
+
+function Modules.Reach:_updatePartModification(part, newSize, reachType)
+    if not part or not part.Parent then return end
+
+    local originalSize = part:GetAttribute(ATTRIBUTE_OG_SIZE)
+    if not newSize then
+        if originalSize then
+            part.Size = originalSize
+            part:SetAttribute(ATTRIBUTE_OG_SIZE, nil)
         end
-        if LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChild(toolName) and LocalPlayer.Backpack[toolName]:IsA("Tool") then
-            return LocalPlayer.Backpack[toolName]
+        if part:FindFirstChild(SELECTION_BOX_NAME) then
+            part[SELECTION_BOX_NAME]:Destroy()
         end
-        return nil
+        return
     end
-    function Modules.Reach:_getEquippedTool()
-        local character = LocalPlayer.Character
-        if character then
-            return character:FindFirstChildOfClass("Tool")
-        end
-        return nil
+
+    if not originalSize then
+        part:SetAttribute(ATTRIBUTE_OG_SIZE, part.Size)
     end
-    function Modules.Reach:_applyModificationToPart(part, reachType, size)
-        if not part or not part:IsA("BasePart") then return end
-            if not part:FindFirstChild("OGSize3") then
-                local v = Instance.new("Vector3Value", part)
-                v.Name = "OGSize3"
-                v.Value = part.Size
-            end
-            if part:FindFirstChild("FunTIMES") then
-                part:FindFirstChild("FunTIMES"):Destroy()
-            end
-            local sb = Instance.new("SelectionBox", part)
-            sb.Name = "FunTIMES"
-            sb.Adornee = part
-            sb.LineThickness = 0.02
-            sb.Color3 = reachType == "box" and Color3.fromRGB(0, 100, 255) or Color3.fromRGB(255, 0, 0)
-            if reachType == "box" then
-                part.Size = Vector3.one * size
-            else
-            part.Size = Vector3.new(part.Size.X, part.Size.Y, size)
-        end
-        part.Massless = true
+
+    local selectionBox = part:FindFirstChild(SELECTION_BOX_NAME)
+    if not selectionBox then
+        selectionBox = Instance.new("SelectionBox", part)
+        selectionBox.Name = SELECTION_BOX_NAME
+        selectionBox.Adornee = part
+        selectionBox.LineThickness = 0.02
     end
-    function Modules.Reach:_resetPart(part)
-        if not part or not part:IsA("BasePart") then return end
-            local originalSize = part:FindFirstChild("OGSize3")
-            if originalSize then
-                part.Size = originalSize.Value
-                originalSize:Destroy()
-            end
-            local selectionBox = part:FindFirstChild("FunTIMES")
-            if selectionBox then
-                selectionBox:Destroy()
-            end
-        end
-        function Modules.Reach:Apply(reachType, size)
-            local self = self
-            if self.State.UI then
-                self.State.UI:Destroy()
-            end
-            local tool = self:_getEquippedTool()
-            if not tool then
-                return DoNotif("No tool equipped.", 3)
-            end
-            local parts = {}
-            for _, p in ipairs(tool:GetDescendants()) do
-                if p:IsA("BasePart") then
-                    table.insert(parts, p)
-                end
-            end
-            if #parts == 0 then
-                return DoNotif("The equipped tool has no physical parts.", 3)
-            end
-            local ui = Instance.new("ScreenGui")
-            ui.Name = "ReachPartSelector"
-            ui.Parent = CoreGui
-            self.State.UI = ui
-            local frame = Instance.new("Frame", ui)
-            frame.Size = UDim2.fromOffset(250, 200)
-            frame.Position = UDim2.new(0.5, -125, 0.5, -100)
-            frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-            Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-            local title = Instance.new("TextLabel", frame)
-            title.Size = UDim2.new(1, 0, 0, 30)
-            title.BackgroundTransparency = 1
-            title.Font = Enum.Font.Code
-            title.Text = "Select a Part to Modify"
-            title.TextColor3 = Color3.fromRGB(200, 220, 255)
-            title.TextSize = 16
-            local scroll = Instance.new("ScrollingFrame", frame)
-            scroll.Size = UDim2.new(1, -20, 1, -40)
-            scroll.Position = UDim2.fromOffset(10, 35)
-            scroll.BackgroundColor3 = frame.BackgroundColor3
-            scroll.BorderSizePixel = 0
-            scroll.ScrollBarThickness = 6
-            local layout = Instance.new("UIListLayout", scroll)
-            layout.Padding = UDim.new(0, 5)
-            for _, part in ipairs(parts) do
-                local btn = Instance.new("TextButton", scroll)
-                btn.Size = UDim2.new(1, 0, 0, 30)
-                btn.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-                btn.TextColor3 = Color3.fromRGB(220, 220, 230)
-                btn.Font = Enum.Font.Code
-                btn.Text = part.Name
-                btn.TextSize = 14
-                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
-                btn.MouseButton1Click:Connect(function()
-                if not part or not part.Parent then
-                    ui:Destroy()
-                    return DoNotif("Part no longer exists.", 3)
-                end
-                if self.State.IsEnabled and self.State.ToolName and self.State.ToolName ~= tool.Name then
-                    self:Reset()
-                end
-                self.State.IsEnabled = true
-                self.State.ToolName = tool.Name
-                self.State.PartName = part.Name
-                self.State.ReachType = reachType
-                self.State.ReachSize = size
-                self:_applyModificationToPart(part, reachType, size)
-                ui:Destroy()
-                self.State.UI = nil
-                DoNotif("Applied " .. reachType .. " reach of " .. size .. " to " .. part.Name, 3)
-            end)
+    selectionBox.Color3 = reachType == "box" and Color3.fromRGB(0, 100, 255) or Color3.fromRGB(255, 0, 0)
+
+    if reachType == "box" then
+        part.Size = Vector3.one * newSize
+    else
+        part.Size = Vector3.new(part.Size.X, part.Size.Y, newSize)
+    end
+    part.Massless = true
+end
+
+function Modules.Reach:_populatePartSelector()
+    local self = Modules.Reach
+    local scroll = self.State.UI.ScrollingFrame
+    for _, child in ipairs(scroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
         end
     end
-    function Modules.Reach:Reset()
-        if not self.State.IsEnabled then
-            return DoNotif("Reach is not active.", 3)
+
+    if not self.State.ActiveTool then return end
+
+    local parts = {}
+    for _, descendant in ipairs(self.State.ActiveTool:GetDescendants()) do
+        if descendant:IsA("BasePart") then
+            table.insert(parts, descendant)
         end
-        local tool = self:_getToolByName(self.State.ToolName)
-        if tool and self.State.PartName then
-            local part = tool:FindFirstChild(self.State.PartName, true)
-            if part then
-                self:_resetPart(part)
-            end
-        end
-        self.State.IsEnabled = false
-        self.State.ToolName = nil
-        self.State.PartName = nil
-        self.State.ReachType = nil
-        self.State.ReachSize = nil
-        DoNotif("Tool reach has been reset.", 3)
     end
-    function Modules.Reach:Init()
-        self.Connections.CharacterAdded = LocalPlayer.CharacterAdded:Connect(function(character)
-        task.wait(0.5)
-        if self.State.IsEnabled and self.State.ToolName and self.State.PartName then
-            local tool = character:FindFirstChild(self.State.ToolName)
-            if tool then
-                local part = tool:FindFirstChild(self.State.PartName, true)
-                if part then
-                    self:_applyModificationToPart(part, self.State.ReachType, self.State.ReachSize)
-                end
+
+    if #parts == 0 then
+        DoNotif("Equipped tool has no physical parts.", 3)
+        return
+    end
+
+    for _, part in ipairs(parts) do
+        local btn = Instance.new("TextButton", scroll)
+        btn.Size = UDim2.new(1, 0, 0, 30)
+        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+        btn.TextColor3 = Color3.fromRGB(220, 220, 230)
+        btn.Font = Enum.Font.Code
+        btn.Text = part.Name
+        btn.TextSize = 14
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+        btn.MouseButton1Click:Connect(function()
+            if not part or not part.Parent or not self.State.ActiveTool then
+                self.State.UI.ScreenGui.Enabled = false
+                return DoNotif("The selected part or tool no longer exists.", 3)
             end
-        end
+
+            -- Store the choice persistently
+            self.State.PersistentToolName = self.State.ActiveTool.Name
+            self.State.PersistentPartName = part.Name
+
+            if self.State.ModifiedPart and self.State.ModifiedPart ~= part then
+                self:_updatePartModification(self.State.ModifiedPart)
+            end
+
+            self.State.IsEnabled = true
+            self.State.ModifiedPart = part
+            self:_updatePartModification(part, self.State.ReachSize, self.State.ReachType)
+
+            self.State.UI.ScreenGui.Enabled = false -- Hide UI after selection
+            DoNotif("Persistently set reach for " .. part.Name .. " on " .. self.State.PersistentToolName, 3)
+        end)
+    end
+end
+
+--// PRIVATE METHODS: EVENT HANDLERS //--
+
+function Modules.Reach:_onToolEquipped(tool)
+    local self = Modules.Reach
+    self.State.ActiveTool = tool
+    self:_populatePartSelector()
+
+    if self.Connections.Unequipped then self.Connections.Unequipped:Disconnect() end
+    self.Connections.Unequipped = tool.Unequipped:Connect(function()
+        self.State.ActiveTool = nil
+        self.State.UI.ScreenGui.Enabled = false
     end)
 end
-Modules.Reach:Init()
-RegisterCommand({Name = "reach", Aliases = {"swordreach"}, Description = "Extends sword reach. ;reach [num]"}, function(args) Modules.Reach:Apply("directional", tonumber(args[1]) or 15) end)
-RegisterCommand({Name = "boxreach", Aliases = {}, Description = "Creates a box hitbox. ;boxreach [num]"}, function(args) Modules.Reach:Apply("box", tonumber(args[1]) or 15) end)
-RegisterCommand({Name = "resetreach", Aliases = {"unreach"}, Description = "Resets tool reach to normal."}, function() Modules.Reach:Reset() end)
+
+function Modules.Reach:_onCharacterAdded(character)
+    local self = Modules.Reach
+
+    -- CORE PERSISTENCE LOGIC: Check if a persistent setting exists and re-apply it.
+    if self.State.PersistentToolName and self.State.PersistentPartName then
+        local function reapplyModification(tool)
+            if tool and tool.Name == self.State.PersistentToolName then
+                -- Use WaitForChild as parts might not be immediately available
+                local part = tool:WaitForChild(self.State.PersistentPartName, 5)
+                if part then
+                    self:_updatePartModification(part, self.State.ReachSize, self.State.ReachType)
+                    self.State.ModifiedPart = part
+                    self.State.IsEnabled = true
+                end
+            end
+        end
+
+        -- Check if the tool is already equipped when the character spawns
+        local equippedTool = character:FindFirstChild(self.State.PersistentToolName)
+        reapplyModification(equippedTool)
+
+        -- Listen for the tool being added to the character later
+        character.ChildAdded:Connect(function(child)
+            if child:IsA("Tool") then
+                reapplyModification(child)
+            end
+        end)
+    end
+    
+    -- General UI logic: Handle any tool being equipped
+    character.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") then self:_onToolEquipped(child) end
+    end)
+    local firstEquippedTool = character:FindFirstChildOfClass("Tool")
+    if firstEquippedTool then self:_onToolEquipped(firstEquippedTool) end
+end
+
+--// PUBLIC API //--
+
+function Modules.Reach:Apply(reachType, size)
+    local self = Modules.Reach
+    
+    if not self.State.ActiveTool then
+        return DoNotif("You must have a tool equipped to select a part.", 3)
+    end
+
+    -- Set the desired reach properties
+    self.State.ReachType = reachType
+    self.State.ReachSize = size
+    
+    -- Repopulate and show the UI for selection
+    self:_populatePartSelector()
+    self.State.UI.ScreenGui.Enabled = true
+end
+
+function Modules.Reach:Reset()
+    local self = Modules.Reach
+    if not self.State.IsEnabled and not self.State.PersistentToolName then 
+        return DoNotif("Reach is not active and no part is set.", 3)
+    end
+
+    -- Find the part to reset, even if the tool is in the backpack
+    local tool
+    if self.State.PersistentToolName then
+        tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(self.State.PersistentToolName)
+        if not tool then
+            tool = LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChild(self.State.PersistentToolName)
+        end
+    end
+
+    if tool and self.State.PersistentPartName then
+        local part = tool:FindFirstChild(self.State.PersistentPartName, true)
+        if part then
+            self:_updatePartModification(part) -- Pass nil to reset
+        end
+    end
+
+    -- CRITICAL: Clear all state, including the persistent choice
+    self.State.IsEnabled = false
+    self.State.ModifiedPart = nil
+    self.State.PersistentToolName = nil
+    self.State.PersistentPartName = nil
+    self.State.ReachType = nil
+    self.State.ReachSize = nil
+
+    if self.State.UI.ScreenGui then
+        self.State.UI.ScreenGui.Enabled = false
+    end
+    DoNotif("Tool reach has been fully reset and persistence cleared.", 3)
+end
+
+--// INITIALIZATION //--
+
+function Modules.Reach:Initialize()
+    local self = Modules.Reach
+    -- Create the persistent UI once.
+    local ui = Instance.new("ScreenGui")
+    ui.Name = "ReachPartSelector_Persistent"
+    ui.Parent = CoreGui
+    ui.Enabled = false
+    ui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    ui.ResetOnSpawn = false
+    self.State.UI.ScreenGui = ui
+
+    local frame = Instance.new("Frame", ui)
+    frame.Size = UDim2.fromOffset(250, 220)
+    frame.Position = UDim2.new(0.5, -125, 0.5, -110)
+    frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    frame.Draggable = true
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+    self.State.UI.Frame = frame
+
+    local title = Instance.new("TextLabel", frame)
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.Code
+    title.Text = "Select a Part to Modify"
+    title.TextColor3 = Color3.fromRGB(200, 220, 255)
+    title.TextSize = 16
+
+    local scroll = Instance.new("ScrollingFrame", frame)
+    scroll.Size = UDim2.new(1, -20, 1, -50)
+    scroll.Position = UDim2.fromOffset(10, 35)
+    scroll.BackgroundColor3 = frame.BackgroundColor3
+    scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 6
+    self.State.UI.ScrollingFrame = scroll
+
+    local layout = Instance.new("UIListLayout", scroll)
+    layout.Padding = UDim.new(0, 5)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    local closeBtn = Instance.new("TextButton", frame)
+    closeBtn.Size = UDim2.fromOffset(20, 20)
+    closeBtn.Position = UDim2.new(1, -25, 0, 5)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(80, 40, 50)
+    closeBtn.Text = "X"
+    closeBtn.Font = Enum.Font.Code
+    closeBtn.TextColor3 = Color3.fromRGB(255, 180, 180)
+    closeBtn.MouseButton1Click:Connect(function() ui.Enabled = false end)
+    Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
+    self.State.UI.CloseButton = closeBtn
+
+    -- Connect to player character events
+    if LocalPlayer.Character then
+        self:_onCharacterAdded(LocalPlayer.Character)
+    end
+    self.Connections.CharacterAdded = LocalPlayer.CharacterAdded:Connect(function(char)
+        self:_onCharacterAdded(char)
+    end)
+
+    -- Register commands within the Initialize function
+    RegisterCommand({Name = "reach", Aliases = {"swordreach"}, Description = "Extends sword reach. ;reach [num]"}, function(args)
+        self:Apply("directional", tonumber(args[1]) or 15)
+    end)
+    RegisterCommand({Name = "boxreach", Aliases = {}, Description = "Creates a box hitbox. ;boxreach [num]"}, function(args)
+        self:Apply("box", tonumber(args[1]) or 15)
+    end)
+    RegisterCommand({Name = "resetreach", Aliases = {"unreach"}, Description = "Resets tool reach and clears persistent setting."}, function()
+        self:Reset()
+    end)
+end
 RegisterCommand({Name = "goto", Aliases = {}, Description = "Teleports to a player. ;goto [player]"}, function(args)
 if not args[1] then
     return DoNotif("Specify a player's name.", 3)
@@ -2104,7 +2231,7 @@ function Modules.ZombieZoneEquipper:FindItemByName(query)
 end
 RegisterCommand({
 Name = "equip",
-Aliases = {"forceequip", "item"},
+Aliases = {"zitem", "item"},
 Description = "Force equips an item in Zombie Zone. Usage: equip <item_name>"
 }, function(args)
 if #args == 0 then
@@ -2261,6 +2388,771 @@ function Modules.ToSpawn:Initialize()
 end
 end)
 end
+
+Modules.TriggerRemoteTouch = {
+    State = {
+        IsExecuting = false -- Debounce to prevent spam
+    }
+}
+
+--// PRIVATE METHODS //--
+
+--[[
+    Finds an object in the workspace from a partial, case-insensitive path.
+    Example: "Buttons/WeaponGiver" -> workspace.Buttons.WeaponGiver
+    This is more user-friendly than requiring the full, exact path.
+]]
+function Modules.TriggerRemoteTouch:_findPartFromPath(path)
+    local current = Workspace
+    for partName in path:gmatch("([^/]+)") do
+        local found = nil
+        for _, child in ipairs(current:GetChildren()) do
+            if child.Name:lower() == partName:lower() then
+                found = child
+                break
+            end
+        end
+        if not found then return nil end -- Path is broken
+        current = found
+    end
+    return current:IsA("BasePart") and current or nil
+end
+
+
+--// PUBLIC API //--
+
+--[[
+    The core execution function that attempts to trigger the touch event.
+]]
+function Modules.TriggerRemoteTouch:Execute(targetPath)
+    local self = Modules.TriggerRemoteTouch
+    if self.State.IsExecuting then return DoNotif("A remote touch is already in progress.", 1) end
+    if not targetPath then return DoNotif("Usage: ;touchpart [path/to/part]", 3) end
+
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return DoNotif("Cannot trigger: Your character's HumanoidRootPart was not found.", 3) end
+
+    local targetPart = self:_findPartFromPath(targetPath)
+    if not targetPart then return DoNotif("Could not find a valid part at path: " .. targetPath, 3) end
+
+    self.State.IsExecuting = true
+    DoNotif("Attempting to trigger touch on: " .. targetPart:GetFullName(), 1.5)
+
+    -- ARCHITECT'S NOTE: The 'firetouchinterest' function is a non-standard, but highly effective
+    -- method for simulating touches provided by certain client environments. We prioritize it.
+    if firetouchinterest then
+        pcall(function()
+            firetouchinterest(hrp, targetPart, 0) -- 0 simulates the start of the touch
+            RunService.Heartbeat:Wait()           -- Wait one frame for the server to process
+            firetouchinterest(hrp, targetPart, 1) -- 1 simulates the end of the touch
+            DoNotif("Successfully triggered touch via firetouchinterest.", 2)
+        end)
+    else
+        -- Fallback to the CFrame method if firetouchinterest is not available.
+        -- This is a universal method that leverages client network ownership.
+        warn("Callum's Warning: 'firetouchinterest' not found. Using CFrame fallback method for TriggerRemoteTouch.")
+        
+        coroutine.wrap(function()
+            local originalCFrame = hrp.CFrame
+            local success, err = pcall(function()
+                hrp.CFrame = targetPart.CFrame -- Teleport to the part
+                RunService.Heartbeat:Wait()   -- Wait one frame for the server to register the physics interaction
+                hrp.CFrame = originalCFrame     -- Instantly teleport back
+            end)
+
+            if success then
+                DoNotif("Successfully triggered touch via CFrame method.", 2)
+            else
+                hrp.CFrame = originalCFrame -- Ensure we return even if the touch part errors
+                DoNotif("CFrame method failed. The target part may be invalid.", 3)
+                warn("TriggerRemoteTouch Error:", err)
+            end
+        end)()
+    end
+
+    -- Reset debounce after a short cooldown
+    task.wait(0.2)
+    self.State.IsExecuting = false
+end
+
+--// INITIALIZATION //--
+
+function Modules.TriggerRemoteTouch:Initialize()
+    local module = self
+    
+    RegisterCommand({
+        Name = "touchpart",
+        Aliases = {"trigger", "touch"},
+        Description = "Remotely triggers the .Touched event on a part. Usage: ;touchpart [path/to/part]"
+    }, function(args)
+        local path = table.concat(args, "/")
+        module:Execute(path)
+    end)
+end
+
+Modules.AutoFarmDrops = {
+    State = {
+        IsEnabled = false,   -- For the continuous auto-farm aura
+        Connection = nil,
+        Remote = nil,
+        CollectedCache = {}  -- Debounce to prevent spamming the remote for the same drop
+    }
+}
+
+--// PRIVATE METHODS //--
+
+--[[
+    The core logic. Takes a "RewardDrop" part, extracts its ID, and fires the remote.
+    Includes a cache to prevent sending duplicate requests for the same drop.
+]]
+function Modules.AutoFarmDrops:_collectDrop(dropPart)
+    local self = Modules.AutoFarmDrops
+    if not (dropPart and dropPart.Parent and self.State.Remote) then return end
+
+    local dropId = dropPart:GetAttribute("DropId")
+    if not dropId then return end
+
+    -- Check cache to see if we've collected this recently
+    if self.State.CollectedCache[dropId] then return end
+
+    -- Fire the vulnerable remote event with the extracted ID
+    pcall(function()
+        self.State.Remote:FireServer(dropId)
+    end)
+    
+    DoNotif("Sent collection signal for: " .. dropPart.Name, 1)
+    
+    -- Add to cache and set it to be removed after 10 seconds to allow for re-collection if it respawns
+    self.State.CollectedCache[dropId] = true
+    task.delay(10, function()
+        self.State.CollectedCache[dropId] = nil
+    end)
+end
+
+--// PUBLIC API //--
+
+--[[
+    Performs a single, map-wide collection of all available drops.
+]]
+function Modules.AutoFarmDrops:CollectOnce()
+    local self = Modules.AutoFarmDrops
+    if not self.State.Remote then return DoNotif("AutoFarm Error: 'CollectRewardDrop' remote not found.", 4) end
+
+    local CollectionService = game:GetService("CollectionService")
+    local taggedDrops = CollectionService:GetTagged("RewardDrop")
+    
+    if #taggedDrops == 0 then
+        return DoNotif("No reward drops found in the workspace.", 3)
+    end
+
+    local collectedCount = 0
+    for _, drop in ipairs(taggedDrops) do
+        self:_collectDrop(drop)
+        collectedCount = collectedCount + 1
+    end
+    DoNotif("Sent collection signals for " .. collectedCount .. " reward drops.", 2)
+end
+
+--[[
+    Toggles the continuous auto-farming aura.
+]]
+function Modules.AutoFarmDrops:ToggleAura()
+    local self = Modules.AutoFarmDrops
+    self.State.IsEnabled = not self.State.IsEnabled
+
+    if self.State.IsEnabled then
+        if not self.State.Remote then
+            self.State.IsEnabled = false -- Revert state
+            return DoNotif("Cannot enable aura: 'CollectRewardDrop' remote not found.", 4)
+        end
+        if self.State.Connection then self.State.Connection:Disconnect() end
+        
+        -- Connect to Heartbeat to constantly scan for new drops
+        self.State.Connection = RunService.Heartbeat:Connect(function()
+            local taggedDrops = game:GetService("CollectionService"):GetTagged("RewardDrop")
+            for _, drop in ipairs(taggedDrops) do
+                self:_collectDrop(drop)
+            end
+        end)
+        DoNotif("Auto-Farm Aura: [ENABLED]", 2)
+    else
+        if self.State.Connection then
+            self.State.Connection:Disconnect()
+            self.State.Connection = nil
+        end
+        DoNotif("Auto-Farm Aura: [DISABLED]", 2)
+    end
+end
+
+--// INITIALIZATION //--
+
+function Modules.AutoFarmDrops:Initialize()
+    local module = self
+    
+    -- Find and cache the remote upon initialization for stability
+    local remote = ReplicatedStorage.Remotes:WaitForChild("CollectRewardDrop", 5)
+    if remote then
+        module.State.Remote = remote
+    else
+        warn("Callum's Warning: AutoFarmDrops module could not find 'ReplicatedStorage.Remotes.CollectRewardDrop'. Commands will not function.")
+    end
+
+    RegisterCommand({
+        Name = "collectall",
+        Aliases = {"getdrops"},
+        Description = "Performs a one-time collection of every reward drop on the map."
+    }, function(args)
+        module:CollectOnce()
+    end)
+
+    RegisterCommand({
+        Name = "autofarm",
+        Aliases = {"farmdrops"},
+        Description = "Toggles an aura that automatically collects any nearby reward drops."
+    }, function(args)
+        module:ToggleAura()
+    end)
+    
+    -- A dedicated command for the high-value target you identified.
+    RegisterCommand({
+        Name = "collectchest",
+        Aliases = {"getchest"},
+        Description = "Specifically collects the special Halloween Purple Chest."
+    }, function()
+        local chest = Workspace:FindFirstChild("HalloweenEventSpecial", true) and Workspace.HalloweenEventSpecial:FindFirstChild("PurpleChest")
+        if chest then
+            module:_collectDrop(chest)
+        else
+            DoNotif("Halloween Purple Chest not found.", 3)
+        end
+    end)
+end
+
+Modules.ScriptHunter = {
+    State = {
+        IsScanning = false
+    }
+}
+
+--// PUBLIC API & INITIALIZATION //--
+
+--[[
+    The core execution function. Scans all LuaSourceContainers for a given set of keywords.
+]]
+function Modules.ScriptHunter:Execute(keywords)
+    local self = Modules.ScriptHunter
+    if self.State.IsScanning then return DoNotif("A script scan is already in progress.", 2) end
+    if not keywords or #keywords == 0 then return DoNotif("Usage: ;huntscript <keyword1> [keyword2] ...", 3) end
+
+    self.State.IsScanning = true
+    DoNotif("Beginning script hunt for keywords: " .. table.concat(keywords, ", "), 3)
+
+    -- Run the scan in a separate thread to prevent the game from freezing
+    task.spawn(function()
+        local findings = {}
+        local scriptsScanned = 0
+
+        for _, script in ipairs(game:GetDescendants()) do
+            -- We are only interested in containers with Lua source code
+            if script:IsA("LuaSourceContainer") then
+                local success, source = pcall(function() return script.Source end)
+                if success and source then
+                    scriptsScanned = scriptsScanned + 1
+                    local lowerSource = source:lower()
+                    local allKeywordsFound = true
+
+                    -- Check if all provided keywords exist in the script's source
+                    for _, keyword in ipairs(keywords) do
+                        if not lowerSource:find(keyword:lower(), 1, true) then
+                            allKeywordsFound = false
+                            break
+                        end
+                    end
+
+                    if allKeywordsFound then
+                        table.insert(findings, script:GetFullName())
+                    end
+                end
+            end
+            -- Yield every 100 scans to ensure the client remains responsive
+            if scriptsScanned % 100 == 0 then task.wait() end
+        end
+
+        -- Report the findings
+        if #findings > 0 then
+            DoNotif("Scan complete. Found " .. #findings .. " matching script(s). Results printed to console (F9).", 4)
+            print("--- [Callum's ScriptHunter Report] ---")
+            for _, path in ipairs(findings) do
+                print("  [!] Match Found: " .. path)
+            end
+            print("--------------------------------------")
+        else
+            DoNotif("Scan complete. No scripts found containing all specified keywords.", 3)
+        end
+
+        self.State.IsScanning = false
+    end)
+end
+
+function Modules.ScriptHunter:Initialize()
+    local module = self
+    
+    RegisterCommand({
+        Name = "huntscript",
+        Aliases = {"findscript", "scripthunt"},
+        Description = "Scans all client scripts for keywords. Usage: ;huntscript <keyword1> <keyword2>"
+    }, function(args)
+        module:Execute(args)
+    end)
+end
+
+Modules.AstralHead = {
+    State = {
+        IsEnabled = false,
+        OriginalProperties = {}, -- Stores original state of modified parts
+        Connections = {}
+    }
+}
+
+--// PRIVATE METHODS //--
+
+--[[
+    Finds all relevant parts (the head and all accessory handles) that need to be modified.
+]]
+function Modules.AstralHead:_getCharacterHeadParts(character)
+    local parts = {}
+    if not character then return parts end
+
+    local head = character:FindFirstChild("Head")
+    if head then table.insert(parts, head) end
+
+    for _, accessory in ipairs(character:GetChildren()) do
+        if accessory:IsA("Accessory") then
+            local handle = accessory:FindFirstChild("Handle")
+            if handle and handle:IsA("BasePart") then
+                table.insert(parts, handle)
+            end
+        end
+    end
+    return parts
+end
+
+--[[
+    Applies the "phantom" effect to the character's head and accessories.
+]]
+function Modules.AstralHead:_enableForCharacter(character)
+    local self = Modules.AstralHead
+    if not character then return end
+    
+    local partsToModify = self:_getCharacterHeadParts(character)
+
+    for _, part in ipairs(partsToModify) do
+        -- Store original properties only if we haven't already
+        if not self.State.OriginalProperties[part] then
+            self.State.OriginalProperties[part] = {
+                Transparency = part.Transparency,
+                CanQuery = part.CanQuery,
+                CanTouch = part.CanTouch
+            }
+        end
+
+        -- Apply the phantom properties
+        part.Transparency = 1
+        part.CanQuery = false
+        part.CanTouch = false
+    end
+end
+
+--[[
+    Restores all head parts to their original, visible, and interactive state.
+]]
+function Modules.AstralHead:_disableForCharacter(character)
+    local self = Modules.AstralHead
+    
+    for part, properties in pairs(self.State.OriginalProperties) do
+        -- pcall to prevent errors if a part was destroyed unexpectedly (e.g., hat removed)
+        pcall(function()
+            if part and part.Parent then
+                part.Transparency = properties.Transparency
+                part.CanQuery = properties.CanQuery
+                part.CanTouch = properties.CanTouch
+            end
+        end)
+    end
+    
+    -- Clear the state table for the next use
+    table.clear(self.State.OriginalProperties)
+end
+
+--// PUBLIC API & INITIALIZATION //--
+
+function Modules.AstralHead:Toggle()
+    local self = Modules.AstralHead
+    self.State.IsEnabled = not self.State.IsEnabled
+
+    if self.State.IsEnabled then
+        DoNotif("Astral Head Enabled. Head is now untargetable.", 2)
+        if LocalPlayer.Character then
+            self:_enableForCharacter(LocalPlayer.Character)
+        end
+    else
+        DoNotif("Astral Head Disabled. Head restored.", 2)
+        if LocalPlayer.Character then
+            self:_disableForCharacter(LocalPlayer.Character)
+        else
+            -- If character doesn't exist, just clear the properties table
+            table.clear(self.State.OriginalProperties)
+        end
+    end
+end
+
+function Modules.AstralHead:Initialize()
+    local module = self
+    
+    -- When a new character is added, apply the effect if the module is enabled.
+    module.State.Connections.CharacterAdded = LocalPlayer.CharacterAdded:Connect(function(character)
+        -- Wait a moment for accessories to load
+        task.wait(0.1) 
+        if module.State.IsEnabled then
+            module:_enableForCharacter(character)
+        end
+    end)
+    
+    -- Before the character is removed, restore its properties to prevent issues.
+    module.State.Connections.CharacterRemoving = LocalPlayer.CharacterRemoving:Connect(function(character)
+        if module.State.IsEnabled then
+            module:_disableForCharacter(character)
+        end
+    end)
+
+    RegisterCommand({
+        Name = "astralhead",
+        Aliases = {"hidehead", "nohead"},
+        Description = "Toggles head invisibility to counter aimbots."
+    }, function()
+        module:Toggle()
+    end)
+end
+
+Modules.RemoteInflict = {
+    State = {
+        Remote = nil,
+        AuraEnabled = false,
+        AuraConnection = nil,
+        AuraRange = 25,
+        DefaultDamage = 100 -- Default damage value if not specified
+    }
+}
+
+--// PRIVATE METHODS //--
+
+--[[
+    The core logic for the damage aura, connected to Heartbeat for efficiency.
+    It finds players within the specified range and fires the InflictTarget remote.
+]]
+function Modules.RemoteInflict:_onAuraHeartbeat()
+    local self = Modules.RemoteInflict
+    local myCharacter = LocalPlayer.Character
+    local myRoot = myCharacter and myCharacter:FindFirstChild("HumanoidRootPart")
+
+    if not myRoot or not self.State.Remote then return end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local targetCharacter = player.Character
+            local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
+
+            if targetRoot and (myRoot.Position - targetRoot.Position).Magnitude <= self.State.AuraRange then
+                -- Based on forensic patterns, remotes like this often expect the target's
+                -- character model or humanoid as the primary argument. We send the character.
+                pcall(function()
+                    self.State.Remote:FireServer(targetCharacter)
+                end)
+            end
+        end
+    end
+end
+
+--// PUBLIC API //--
+
+--[[
+    Toggles the damage aura on or off.
+]]
+function Modules.RemoteInflict:ToggleAura(range)
+    local self = Modules.RemoteInflict
+    self.State.AuraEnabled = not self.State.AuraEnabled
+
+    if range and tonumber(range) then
+        self.State.AuraRange = tonumber(range)
+        DoNotif("Inflict Aura range set to " .. range, 2)
+    end
+
+    if self.State.AuraEnabled then
+        if not self.State.Remote then
+            self.State.AuraEnabled = false -- Revert state
+            return DoNotif("Cannot enable aura: 'InflictTarget' remote not found.", 4)
+        end
+
+        if self.State.AuraConnection then self.State.AuraConnection:Disconnect() end
+        self.State.AuraConnection = RunService.Heartbeat:Connect(function() self:_onAuraHeartbeat() end)
+        DoNotif("Inflict Aura Enabled (Range: " .. self.State.AuraRange .. ")", 2)
+    else
+        if self.State.AuraConnection then
+            self.State.AuraConnection:Disconnect()
+            self.State.AuraConnection = nil
+        end
+        DoNotif("Inflict Aura Disabled", 2)
+    end
+end
+
+--[[
+    Executes a single damage infliction on a specified target.
+]]
+function Modules.RemoteInflict:Execute(targetPlayer, damageAmount)
+    local self = Modules.RemoteInflict
+    if not self.State.Remote then
+        return DoNotif("Cannot inflict: 'InflictTarget' remote not found.", 4)
+    end
+
+    local targetCharacter = targetPlayer and targetPlayer.Character
+    if not targetCharacter then
+        return DoNotif("Target '" .. tostring(targetPlayer) .. "' does not have a character.", 3)
+    end
+
+    DoNotif("Sending inflict signal to " .. targetPlayer.Name, 1.5)
+    
+    -- The arguments sent here are educated guesses based on common, insecure patterns.
+    -- The most common is just the character instance. Some may include a damage value.
+    -- We will try sending both if a damage value is provided.
+    pcall(function()
+        if damageAmount then
+             self.State.Remote:FireServer(targetCharacter, damageAmount)
+        else
+             self.State.Remote:FireServer(targetCharacter)
+        end
+    end)
+end
+
+--// INITIALIZATION //--
+
+function Modules.RemoteInflict:Initialize()
+    local module = self
+
+    -- Find and cache the remote upon initialization
+    local remote = ReplicatedStorage.Remotes:WaitForChild("InflictTarget", 5)
+    if remote then
+        module.State.Remote = remote
+    else
+        warn("Callum's Warning: RemoteInflict module could not find 'ReplicatedStorage.Remotes.InflictTarget'. The commands will not function.")
+    end
+
+    RegisterCommand({
+        Name = "inflict",
+        Aliases = {"damage", "hurttarget"},
+        Description = "Uses InflictTarget remote on a player. Usage: ;inflict <player> [damage]"
+    }, function(args)
+        if not args[1] then return DoNotif("Usage: ;inflict <player> [optional_damage]", 4) end
+        
+        local targetPlayer = Utilities.findPlayer(args[1])
+        if not targetPlayer then return DoNotif("Player not found: " .. args[1], 3) end
+        
+        local damage = tonumber(args[2]) -- Will be nil if not provided, which is handled
+        module:Execute(targetPlayer, damage)
+    end)
+
+    RegisterCommand({
+        Name = "inflictaura",
+        Aliases = {"killaura", "auradamage"},
+        Description = "Toggles an aura that uses InflictTarget on nearby players. Usage: ;inflictaura [range]"
+    }, function(args)
+        module:ToggleAura(args[1])
+    end)
+end
+
+Modules.ForceEquip = {
+    State = {
+        Remote = nil,
+        WeaponGivers = {} -- A cache of found weapon givers
+    }
+}
+
+--// PRIVATE METHODS //--
+
+--[[
+    Scans the specific 'workspace.TheShack.WeaponGivers' folder and caches its contents.
+    This is a more direct and reliable method than a generic tag scan for this specific game.
+]]
+function Modules.ForceEquip:_scanAndCacheGivers()
+    local self = Modules.ForceEquip
+    table.clear(self.State.WeaponGivers) -- Clear cache for a fresh scan
+
+    local giversFolder
+    local success, result = pcall(function()
+        -- Safely wait for the known folder structure to exist.
+        giversFolder = Workspace:WaitForChild("TheShack", 5):WaitForChild("WeaponGivers", 5)
+    end)
+
+    if not success or not giversFolder then
+        warn("Callum's Warning: ForceEquip could not find the required folder at 'workspace.TheShack.WeaponGivers'.")
+        return 0
+    end
+
+    for _, part in ipairs(giversFolder:GetChildren()) do
+        -- A valid giver is a BasePart with the 'WeaponId' attribute, based on prior analysis.
+        if part:IsA("BasePart") and part:GetAttribute("WeaponId") then
+            self.State.WeaponGivers[part.Name:lower()] = part
+        end
+    end
+    
+    return table.getn(self.State.WeaponGivers)
+end
+
+--// PUBLIC API //--
+
+--[[
+    Lists all discoverable weapon givers from the target folder to the console.
+]]
+function Modules.ForceEquip:ListWeapons()
+    local self = Modules.ForceEquip
+    local count = self:_scanAndCacheGivers()
+
+    if count > 0 then
+        DoNotif("Found " .. count .. " weapon givers. List printed to console (F9).", 3)
+        print("--- [Callum's Analysis] Available Weapon Givers ---")
+        local sortedNames = {}
+        for name in pairs(self.State.WeaponGivers) do
+            table.insert(sortedNames, self.State.WeaponGivers[name].Name)
+        end
+        table.sort(sortedNames)
+        for _, name in ipairs(sortedNames) do
+            print("  -> " .. name)
+        end
+        print("-------------------------------------------------")
+    else
+        DoNotif("Scan complete. No valid weapon givers found in the target folder.", 3)
+    end
+end
+
+--[[
+    Finds a weapon giver by name from the cache and fires the remote event to equip it.
+]]
+function Modules.ForceEquip:Execute(weaponName)
+    local self = Modules.ForceEquip
+    weaponName = weaponName:lower()
+
+    if not self.State.Remote then
+        return DoNotif("ForceEquip Error: 'PickWeapon' remote not found.", 4)
+    end
+
+    if not next(self.State.WeaponGivers) then
+        self:_scanAndCacheGivers()
+    end
+
+    local targetGiver = self.State.WeaponGivers[weaponName]
+    if not targetGiver then
+        return DoNotif("Could not find a weapon giver named '" .. weaponName .. "'. Try ';forceequip list'.", 4)
+    end
+
+    local weaponId = targetGiver:GetAttribute("WeaponId")
+    if not weaponId then
+        return DoNotif("Error: Target giver '" .. targetGiver.Name .. "' is missing its 'WeaponId' attribute.", 4)
+    end
+    
+    pcall(function()
+        self.State.Remote:FireServer(weaponId)
+    end)
+    DoNotif("Force-equip signal sent for: " .. targetGiver.Name, 2)
+end
+
+--// INITIALIZATION //--
+
+function Modules.ForceEquip:Initialize()
+    local module = self
+    
+    local remote = ReplicatedStorage.Remotes:WaitForChild("PickWeapon", 5)
+    if remote then
+        module.State.Remote = remote
+    else
+        warn("Callum's Warning: ForceEquip module could not find 'ReplicatedStorage.Remotes.PickWeapon'. The command will not function.")
+    end
+
+    RegisterCommand({
+        Name = "forceequip",
+        Aliases = {"fequip", "getgun"},
+        Description = "Equips a weapon from a giver, bypassing checks. Usage: ;forceequip <name|list>"
+    }, function(args)
+        if not args[1] then
+            return DoNotif("Usage: ;forceequip <weapon name> or ;forceequip list", 4)
+        end
+        
+        local command = table.concat(args, " ")
+        if command:lower() == "list" then
+            module:ListWeapons()
+        else
+            module:Execute(command)
+        end
+    end)
+end
+
+Modules.GrabTools = {
+    State = {
+        IsEnabled = false,
+        Connection = nil
+    }
+}
+
+function Modules.GrabTools:_onHeartbeat()
+    local localPlayerBackpack = LocalPlayer and LocalPlayer:FindFirstChild("Backpack")
+    if not localPlayerBackpack then return end
+
+    -- Iterate through the immediate children of Workspace for performance.
+    -- Dropped tools are almost always parented directly to workspace.
+    for _, child in ipairs(Workspace:GetChildren()) do
+        -- A dropped tool is an unanchored Tool object with a Handle.
+        if child:IsA("Tool") and child:FindFirstChild("Handle") and not child.Handle.Anchored then
+            -- By changing the parent on the client, network ownership rules
+            -- will replicate this change to the server.
+            child.Parent = localPlayerBackpack
+            DoNotif("Grabbed Tool: " .. child.Name, 1.5)
+        end
+    end
+end
+
+function Modules.GrabTools:Toggle()
+    local self = Modules.GrabTools
+    self.State.IsEnabled = not self.State.IsEnabled
+
+    if self.State.IsEnabled then
+        -- If already connected, disconnect to prevent duplicates (safety check).
+        if self.State.Connection then self.State.Connection:Disconnect() end
+        
+        -- Connect the core logic to the Heartbeat service for efficient, continuous checking.
+        self.State.Connection = RunService.Heartbeat:Connect(function() self:_onHeartbeat() end)
+        DoNotif("Tool Grabber Enabled", 2)
+    else
+        -- Disconnect the Heartbeat function to disable the module.
+        if self.State.Connection then
+            self.State.Connection:Disconnect()
+            self.State.Connection = nil
+        end
+        DoNotif("Tool Grabber Disabled", 2)
+    end
+end
+
+--// INITIALIZATION //--
+
+function Modules.GrabTools:Initialize()
+    local module = self -- Capture 'self' for the command closure, as per the admin's pattern.
+    
+    RegisterCommand({
+        Name = "grabtools",
+        Aliases = {"gt", "toolgrab"},
+        Description = "Toggles an auto-grabber for all dropped tools in the workspace."
+    }, function(args)
+        module:Toggle()
+    end)
+end
+
 Modules.SuperPush = {
 State = {
 IsEnabled = false,
@@ -2802,7 +3694,7 @@ end
 Modules.Strengthen = {
     State = {
         Enabled = false,
-        Density = 1100,
+        Density = 100,
         OriginalProperties = {},
     },
 }
