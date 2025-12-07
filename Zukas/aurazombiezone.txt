@@ -1,0 +1,159 @@
+--[[
+    Aura | Multi-Tool
+    Developed by Callum & Hailey
+    Features:
+    - ESP: Renders tracers, boxes, and real-time health for all AI.
+    - God Mode [Napalm Strike]: Press 'G' to invoke a napalm strike at the mouse's 3D position.
+    - Toggle: Press 'N' to enable/disable the ESP visuals.
+]]
+
+--// Services & Core
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local localPlayer = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local mouse = localPlayer:GetMouse()
+
+--// Main Table
+local Aura = {}
+Aura.Enabled = true
+Aura.DrawingObjects = {} -- Cache drawing objects for performance
+
+--// From our intel on `abilityFunctions`
+local renderAbilityEvent = ReplicatedStorage.events.renderAbility
+
+--// Feature 1: ESP Rendering Logic
+function Aura:RenderESP()
+    -- Clear previous frame's drawings
+    for zombie, objects in pairs(Aura.DrawingObjects) do
+        if not zombie or not zombie.Parent then
+            for _, obj in pairs(objects) do
+                obj:Remove()
+            end
+            Aura.DrawingObjects[zombie] = nil
+        end
+    end
+
+    for _, zombie in ipairs(workspace.ai:GetChildren()) do
+        local humanoid = zombie:FindFirstChild("Humanoid")
+        local hrp = zombie:FindFirstChild("HumanoidRootPart")
+
+        if humanoid and hrp and humanoid:GetAttribute("clientHealth") > 0 then
+            local screenPos, onScreen = camera:WorldToScreenPoint(hrp.Position)
+            if onScreen then
+                local objects = Aura.DrawingObjects[zombie] or {}
+                
+                -- Create Tracer
+                if not objects.Tracer then
+                    objects.Tracer = Drawing.new("Line")
+                end
+                objects.Tracer.Visible = true
+                objects.Tracer.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+                objects.Tracer.To = Vector2.new(screenPos.X, screenPos.Y)
+                objects.Tracer.Color = Color3.fromRGB(255, 50, 50)
+                objects.Tracer.Thickness = 1
+                objects.Tracer.Transparency = 0.5
+
+                -- Create Health Bar
+                local head = zombie:FindFirstChild("head")
+                if head then
+                    local healthPercent = humanoid:GetAttribute("clientHealth") / humanoid.MaxHealth
+                    local healthBarPos, healthOnScreen = camera:WorldToScreenPoint(head.Position + Vector3.new(0, 2.5, 0))
+                    
+                    if healthOnScreen then
+                        -- Health Bar Background
+                        if not objects.HealthBg then
+                            objects.HealthBg = Drawing.new("Quad")
+                        end
+                        objects.HealthBg.Visible = true
+                        objects.HealthBg.PointA = Vector2.new(healthBarPos.X - 30, healthBarPos.Y - 5)
+                        objects.HealthBg.PointB = Vector2.new(healthBarPos.X + 30, healthBarPos.Y - 5)
+                        objects.HealthBg.PointC = Vector2.new(healthBarPos.X + 30, healthBarPos.Y + 5)
+                        objects.HealthBg.PointD = Vector2.new(healthBarPos.X - 30, healthBarPos.Y + 5)
+                        objects.HealthBg.Color = Color3.new(0, 0, 0)
+                        objects.HealthBg.Filled = true
+                        objects.HealthBg.Transparency = 0.4
+                        
+                        -- Health Bar Foreground
+                        if not objects.HealthFg then
+                            objects.HealthFg = Drawing.new("Quad")
+                        end
+                        local barWidth = 60 * healthPercent
+                        objects.HealthFg.Visible = true
+                        objects.HealthFg.PointA = Vector2.new(healthBarPos.X - 30, healthBarPos.Y - 5)
+                        objects.HealthFg.PointB = Vector2.new(healthBarPos.X - 30 + barWidth, healthBarPos.Y - 5)
+                        objects.HealthFg.PointC = Vector2.new(healthBarPos.X - 30 + barWidth, healthBarPos.Y + 5)
+                        objects.HealthFg.PointD = Vector2.new(healthBarPos.X - 30, healthBarPos.Y + 5)
+                        objects.HealthFg.Color = Color3.fromHSV(0.33 * healthPercent, 1, 1) -- Green to Red
+                        objects.HealthFg.Filled = true
+                    end
+                end
+                
+                Aura.DrawingObjects[zombie] = objects
+            else
+                -- Hide objects if off-screen
+                if Aura.DrawingObjects[zombie] then
+                    for _, obj in pairs(Aura.DrawingObjects[zombie]) do
+                        obj.Visible = false
+                    end
+                end
+            end
+        end
+    end
+end
+
+--// Feature 2: God Mode (Ability Invocation) Logic
+function Aura:InvokeNapalm(position)
+    local args = {
+        "Napalm Strike",
+        {
+            -- We create a small cluster of 4 points around the target position for effect
+            position + Vector3.new(10, 0, 10),
+            position + Vector3.new(-10, 0, 10),
+            position + Vector3.new(10, 0, -10),
+            position + Vector3.new(-10, 0, -10)
+        }
+    }
+    
+    -- `firesignal` is the standard exploit function for client-side event invocation.
+    -- We are firing the OnClientEvent signal directly, bypassing any server checks.
+    firesignal(renderAbilityEvent.OnClientEvent, unpack(args))
+end
+
+--// Initialization and Input Handling
+function Aura:Init()
+    -- ESP Connection
+    RunService:BindToRenderStep("AuraESP", Enum.RenderPriority.Camera.Value + 1, function()
+        if Aura.Enabled then
+            Aura:RenderESP()
+        else
+            -- If disabled, clear all drawings once
+            for zombie, objects in pairs(Aura.DrawingObjects) do
+                for _, obj in pairs(objects) do
+                    obj:Remove()
+                end
+            end
+            Aura.DrawingObjects = {}
+        end
+    end)
+
+    -- Input Connection
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+
+        if input.KeyCode == Enum.KeyCode.G then
+            if mouse.Target then
+                Aura:InvokeNapalm(mouse.Hit.p)
+            end
+        end
+
+        if input.KeyCode == Enum.KeyCode.N then
+            Aura.Enabled = not Aura.Enabled
+        end
+    end)
+end
+
+Aura:Init()

@@ -1,0 +1,287 @@
+-- Fixed and optimized version
+_G.x = nil -- target, dont change
+print("h:loaded")
+
+Grips = {
+    Up = CFrame.new(0, 0, -1.70000005, 0, 0, 1, 1, 0, 0, 0, 1, 0),
+    Out = CFrame.new(0, 0, -1.70000005, 0, 1, 0, 1, -0, 0, 0, 0, -1)
+}
+
+_G.e = nil
+_G.rage = 0
+local h3 = 0
+local h4 = false
+local h = 3
+local h2 = 0
+_G.g = nil
+_G.pos = nil
+local jo = 0
+local jo2 = 1
+local hhh = false
+local jo3 = 0
+local player = game.Players.LocalPlayer
+
+-- Fixed NumberValue creation and random movement
+local numba = Instance.new("NumberValue", workspace)
+numba.Name = "NumbaValue"
+numba.Value = -40
+
+spawn(function()
+    while true do
+        wait(0.14)
+        numba.Value = math.random(-90, -35)
+        game.TweenService:Create(numba, TweenInfo.new(0.07, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 1, true, 0), {Value = math.random(35, 90)}):Play()
+    end
+end)
+
+-- Fixed BodyGyro setup
+local bg = Instance.new("BodyGyro")
+bg.Name = "TargetGyro"
+bg.D = 1
+bg.P = 30000
+bg.MaxTorque = Vector3.new(400000000, 400000000, 400000000)
+bg.Parent = game.ReplicatedStorage
+
+spawn(function()
+    game:GetService("RunService").RenderStepped:Connect(function()
+        if _G.x ~= nil and _G.x:FindFirstChild("HumanoidRootPart") and _G.y == 1 and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            bg.Parent = player.Character.HumanoidRootPart
+            
+            local rootPart = player.Character.HumanoidRootPart
+            local targetRoot = _G.x.HumanoidRootPart
+            
+            local torso = rootPart.CFrame.p + rootPart.CFrame.LookVector * 1 + rootPart.CFrame.RightVector * 1
+            local torso2
+            
+            if h2 == 0 then
+                torso2 = targetRoot.Position + targetRoot.Velocity / 10
+            elseif h2 == 1 then
+                torso2 = targetRoot.Position + rootPart.CFrame.RightVector * (numba.Value / 25)
+            end
+            
+            -- Fixed CFrame calculation (removed y component properly)
+            bg.CFrame = CFrame.new(Vector3.new(torso.X, 0, torso.Z), Vector3.new(torso2.X, 0, torso2.Z))
+            
+            -- Fixed position calculation
+            _G.pos = targetRoot.Position + targetRoot.CFrame.RightVector * -1 + targetRoot.CFrame.LookVector * 0 + rootPart.CFrame.RightVector * 6
+
+            -- Fixed jump logic
+            if targetRoot.Position.Y - 0.5 > rootPart.Position.Y then
+                spawn(function() 
+                    if player.Character and player.Character:FindFirstChild("Humanoid") then
+                        player.Character.Humanoid.Jump = true 
+                    end
+                end)
+            end
+
+            local targetVelocity = targetRoot.Velocity
+            local playerLookVector = rootPart.CFrame.LookVector
+            local distance = (targetRoot.Position - rootPart.CFrame.p).magnitude
+
+            -- Optimized movement logic
+            if targetVelocity.Magnitude >= playerLookVector.Magnitude then
+                _G.pos = targetRoot.Position + targetRoot.CFrame.RightVector * -1 + targetRoot.CFrame.LookVector * -1 + rootPart.CFrame.RightVector * 6 - targetRoot.Velocity/2
+                local torso = rootPart.CFrame.p + rootPart.CFrame.LookVector * 1 + rootPart.CFrame.RightVector * 1
+                local torso2 = targetRoot.Position + targetRoot.Velocity/10
+                
+                if h2 == 0 then
+                    torso2 = targetRoot.Position + targetRoot.Velocity/10
+                elseif h2 == 1 then
+                    torso2 = targetRoot.Position + rootPart.CFrame.RightVector * (numba.Value/25)
+                end
+                
+                bg.CFrame = CFrame.new(Vector3.new(torso.X, 0, torso.Z), Vector3.new(torso2.X, 0, torso2.Z))
+                
+                if distance <= 10 then
+                    _G.pos = targetRoot.Position + targetRoot.CFrame.RightVector * -1 + targetRoot.CFrame.LookVector * -1 + (rootPart.CFrame.RightVector * 1 + rootPart.CFrame.LookVector * -1) - targetRoot.Velocity/5 + rootPart.CFrame.RightVector * h
+                    jo = jo + 1
+                    if jo == 3 then
+                        h = h * -1
+                        jo = 0
+                    end
+                end    
+            else
+                _G.pos = targetRoot.Position + targetRoot.CFrame.RightVector * -1 + targetRoot.CFrame.LookVector * -1 + rootPart.CFrame.RightVector * 6 + targetRoot.Velocity/10
+                local torso = rootPart.CFrame.p + rootPart.CFrame.LookVector * 1 + rootPart.CFrame.RightVector * 1
+                local torso2 = targetRoot.Position + targetRoot.Velocity/10
+                
+                if h2 == 0 then
+                    torso2 = targetRoot.Position + targetRoot.Velocity/10
+                elseif h2 == 1 then
+                    torso2 = targetRoot.Position + rootPart.CFrame.RightVector * (numba.Value/25)
+                end
+                
+                bg.CFrame = CFrame.new(Vector3.new(torso.X, 0, torso.Z), Vector3.new(torso2.X, 0, torso2.Z))
+                
+                if distance <= 10 then
+                    _G.pos = targetRoot.Position + targetRoot.CFrame.RightVector * 1 + targetRoot.CFrame.LookVector * -1 + (rootPart.CFrame.RightVector * 1 + rootPart.CFrame.LookVector * -1) + targetRoot.Velocity/3 + rootPart.CFrame.RightVector * h
+                    jo = jo + 1
+                    if jo == 3 then
+                        h = h * -1
+                        jo = 0
+                    end
+                end
+            end
+            
+            -- Fixed distance checking
+            if distance <= 10 then
+                h2 = 1
+            else
+                h2 = 0
+            end
+            
+            if distance <= 20 then
+                local rightArm = player.Character:FindFirstChild("Right Arm") or player.Character:FindFirstChild("RightHand")
+                if rightArm and (targetRoot.Position - rightArm.Position).magnitude <= 5 or hhh == true then
+                    hhh = true
+                    if rightArm and (targetRoot.Position - rightArm.Position).magnitude >= 7 then
+                        hhh = false
+                    end
+                    
+                    jo3 = jo3 + 1
+                    if jo3 >= math.random(2, 4) then
+                        jo3 = 0
+                        jo2 = (jo2 == 0) and -2 or 0
+                    end
+                    
+                    _G.pos = rootPart.CFrame.LookVector * 5 * jo2 + targetRoot.Velocity/20
+                    
+                    if targetVelocity.Magnitude >= playerLookVector.Magnitude then
+                        _G.pos = rootPart.CFrame.LookVector * 5 * jo2 + targetRoot.CFrame.RightVector * -1 + targetRoot.CFrame.LookVector * -1 + rootPart.CFrame.RightVector * 6 - targetRoot.Velocity/2
+                        local torso = rootPart.CFrame.p + rootPart.CFrame.LookVector * 1 + rootPart.CFrame.RightVector * 1
+                        local torso2 = targetRoot.Position + targetRoot.Velocity/10
+                        
+                        if h2 == 0 then
+                            torso2 = targetRoot.Position + targetRoot.Velocity/10
+                        elseif h2 == 1 then
+                            torso2 = targetRoot.Position + rootPart.CFrame.RightVector * (numba.Value/25)
+                        end
+                        
+                        bg.CFrame = CFrame.new(Vector3.new(torso.X, 0, torso.Z), Vector3.new(torso2.X, 0, torso2.Z))
+                        bg.D = 1
+                        
+                        if distance <= 10 then
+                            _G.pos = rootPart.CFrame.LookVector * 5 * jo2 + targetRoot.CFrame.RightVector * -1 + targetRoot.CFrame.LookVector * -1 + (rootPart.CFrame.RightVector * 1 + rootPart.CFrame.LookVector * -1) - targetRoot.Velocity/5 + rootPart.CFrame.RightVector * h
+                            jo = jo + 1
+                            if jo == 3 then
+                                h = h * -1
+                                jo = 0
+                            end
+                        end    
+                    else
+                        _G.pos = rootPart.CFrame.LookVector * 5 * jo2 + targetRoot.CFrame.RightVector * -1 + targetRoot.CFrame.LookVector * -1 + rootPart.CFrame.RightVector * 6 + targetRoot.Velocity/10
+                        local torso = rootPart.CFrame.p + rootPart.CFrame.LookVector * 1 + rootPart.CFrame.RightVector * 1
+                        local torso2 = targetRoot.Position + targetRoot.Velocity/10
+                        
+                        if h2 == 0 then
+                            torso2 = targetRoot.Position + targetRoot.Velocity/10
+                        elseif h2 == 1 then
+                            torso2 = targetRoot.Position + rootPart.CFrame.RightVector * (numba.Value/25)
+                        end
+                        
+                        bg.CFrame = CFrame.new(Vector3.new(torso.X, 0, torso.Z), Vector3.new(torso2.X, 0, torso2.Z))
+                        
+                        if distance <= 10 then
+                            _G.pos = rootPart.CFrame.LookVector * 5 * jo2 + targetRoot.CFrame.RightVector * 1 + targetRoot.CFrame.LookVector * -1 + (rootPart.CFrame.RightVector * 1 + rootPart.CFrame.LookVector * -1) + targetRoot.Velocity/3 + rootPart.CFrame.RightVector * h
+                            jo = jo + 1
+                            if jo == 3 then
+                                h = h * -1
+                                jo = 0
+                            end
+                        end
+                    end
+                end
+                
+                -- Fixed tool activation
+                local tool = player.Character:FindFirstChildOfClass("Tool")
+                if tool then
+                    tool:Activate()
+                end
+            end
+            
+            -- Fixed movement call
+            if player.Character:FindFirstChild("Humanoid") then
+                player.Character.Humanoid:MoveTo(_G.pos)
+            end
+        else
+            bg.Parent = game.ReplicatedStorage
+        end
+    end)
+end)
+
+-- Fixed mouse and input handling
+local mouse = player:GetMouse()
+_G.y = 0 -- Initialize y variable
+
+_G.e = game:GetService("UserInputService").InputBegan:Connect(function(key)
+    if key.KeyCode == Enum.KeyCode.R then
+        _G.y = 1 - _G.y
+        print("y = " .. _G.y)
+        game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+            Text = "y = " .. _G.y,
+            Color = Color3.fromRGB(255, 255, 0),
+            Font = Enum.Font.SourceSansBold,
+            TextSize = 18
+        })
+        
+    elseif key.KeyCode == Enum.KeyCode.E then 
+        if mouse.Target and mouse.Target.Parent:FindFirstChild("HumanoidRootPart") then
+            _G.x = mouse.Target.Parent 
+            print(_G.x.Name .. " Parent - " .. _G.x.Parent.Name .. " Parent.Parent - " .. ( _G.x.Parent.Parent and _G.x.Parent.Parent.Name or "nil"))
+            game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                Text = _G.x.Name .. " Parent - " .. _G.x.Parent.Name .. " Parent.Parent - " .. ( _G.x.Parent.Parent and _G.x.Parent.Parent.Name or "nil"),
+                Color = Color3.fromRGB(0, 255, 255),
+                Font = Enum.Font.SourceSansBold,
+                TextSize = 18
+            })
+        elseif mouse.Target and mouse.Target.Parent.Parent and mouse.Target.Parent.Parent:FindFirstChild("HumanoidRootPart") then
+            _G.x = mouse.Target.Parent.Parent
+            print(_G.x.Name .. " Parent - " .. _G.x.Parent.Name .. " Parent.Parent - " .. ( _G.x.Parent.Parent and _G.x.Parent.Parent.Name or "nil"))
+            game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                Text = _G.x.Name .. " Parent - " .. _G.x.Parent.Name .. " Parent.Parent - " .. ( _G.x.Parent.Parent and _G.x.Parent.Parent.Name or "nil"),
+                Color = Color3.fromRGB(0, 255, 255),
+                Font = Enum.Font.SourceSansBold,
+                TextSize = 18
+            })
+        elseif mouse.Target and mouse.Target.Parent.Parent and mouse.Target.Parent.Parent.Parent and mouse.Target.Parent.Parent.Parent:FindFirstChild("HumanoidRootPart") then
+            _G.x = mouse.Target.Parent.Parent.Parent
+            print(_G.x.Name .. " Parent - " .. _G.x.Parent.Name .. " Parent.Parent - " .. ( _G.x.Parent.Parent and _G.x.Parent.Parent.Name or "nil"))
+            game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                Text = _G.x.Name .. " Parent - " .. _G.x.Parent.Name .. " Parent.Parent - " .. ( _G.x.Parent.Parent and _G.x.Parent.Parent.Name or "nil"),
+                Color = Color3.fromRGB(0, 255, 255),
+                Font = Enum.Font.SourceSansBold,
+                TextSize = 18
+            })
+        end
+    elseif key.KeyCode == Enum.KeyCode.T then
+        _G.rage = 1 - _G.rage
+        game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+            Text = "_G.rage = " .. _G.rage,
+            Color = Color3.fromRGB(255, 255, 0),
+            Font = Enum.Font.SourceSansBold,
+            TextSize = 18
+        })
+    end
+end)
+
+-- Fixed rage mode loop
+spawn(function()
+    while true do
+        wait(0.1) -- Reduced CPU usage
+        if _G.rage == 1 and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local rootPos = player.Character.HumanoidRootPart.Position
+            local point1 = rootPos + Vector3.new(-40, -40, -40)
+            local point2 = rootPos + Vector3.new(40, 40, 40)
+            local region = Region3.new(point1, point2)
+            local parts = workspace:FindPartsInRegion3(region, player.Character, 100) -- Limited parts count
+            
+            for _, v in pairs(parts) do
+                if v.Parent and v.Parent:FindFirstChild("Humanoid") and v.Parent.Humanoid.Health > 0 and v.Parent ~= player.Character then
+                    _G.x = v.Parent
+                    wait(0.5)
+                    break
+                end
+            end
+        end
+    end
+end)

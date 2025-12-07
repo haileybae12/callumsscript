@@ -1,0 +1,152 @@
+﻿--[[
+    IronSights Deobfuscator [V18]
+    Developed by Callum
+
+    Architecture:
+    - Now includes a "Copy Results" button that uses the executor's 'setclipboard'
+      functionality for easy data extraction.
+    - This is a static analysis tool designed to reverse-engineer obfuscated Lua code
+      by providing a GUI to bypass console limits and automate constant dumping.
+
+    Instructions:
+    1. Run this script. A GUI will appear.
+    2. Paste the URL of the target script into the input box.
+    3. Click the "Analyze & Deobfuscate" button.
+    4. Click the "Copy Results" button to copy the output to your clipboard.
+    5. Paste the results back to me.
+]]
+
+--//==================================================================================//--
+--// GUI Creation
+--//==================================================================================//--
+local DeobfuscatorGui = Instance.new("ScreenGui")
+DeobfuscatorGui.Name = "IronSightsDeobfuscator_V18"
+DeobfuscatorGui.ResetOnSpawn = false
+DeobfuscatorGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local MainWindow = Instance.new("Frame")
+MainWindow.Size = UDim2.new(0, 500, 0, 440) -- Increased height for new button
+MainWindow.Position = UDim2.new(0.5, -250, 0.5, -220)
+MainWindow.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+MainWindow.BorderSizePixel = 0
+Instance.new("UICorner", MainWindow).CornerRadius = UDim.new(0, 6)
+
+local TitleBar = Instance.new("Frame", MainWindow)
+TitleBar.Size = UDim2.new(1, 0, 0, 30)
+TitleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 6)
+
+local TitleLabel = Instance.new("TextLabel", TitleBar)
+TitleLabel.Size = UDim2.new(1, -10, 1, 0)
+TitleLabel.Position = UDim2.fromScale(0.02, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Font = Enum.Font.SourceSansSemibold
+TitleLabel.Text = "IronSights Deobfuscator V18"
+TitleLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+TitleLabel.TextSize = 16
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local UrlInput = Instance.new("TextBox", MainWindow)
+UrlInput.Size = UDim2.new(1, -20, 0, 30)
+UrlInput.Position = UDim2.new(0.5, 0, 0, 45)
+UrlInput.AnchorPoint = Vector2.new(0.5, 0)
+UrlInput.Font = Enum.Font.SourceSans
+UrlInput.Text = "github link here"
+UrlInput.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+UrlInput.TextColor3 = Color3.fromRGB(200, 200, 200)
+Instance.new("UICorner", UrlInput).CornerRadius = UDim.new(0, 4)
+
+local AnalyzeButton = Instance.new("TextButton", MainWindow)
+AnalyzeButton.Size = UDim2.new(1, -20, 0, 30)
+AnalyzeButton.Position = UDim2.new(0.5, 0, 0, 85)
+AnalyzeButton.AnchorPoint = Vector2.new(0.5, 0)
+AnalyzeButton.Font = Enum.Font.SourceSansBold
+AnalyzeButton.Text = "Analyze & Deobfuscate"
+AnalyzeButton.BackgroundColor3 = Color3.fromRGB(80, 120, 200)
+AnalyzeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+Instance.new("UICorner", AnalyzeButton).CornerRadius = UDim.new(0, 4)
+
+-- [NEW] Copy Button
+local CopyButton = Instance.new("TextButton", MainWindow)
+CopyButton.Size = UDim2.new(1, -20, 0, 30)
+CopyButton.Position = UDim2.new(0.5, 0, 0, 125)
+CopyButton.AnchorPoint = Vector2.new(0.5, 0)
+CopyButton.Font = Enum.Font.SourceSansBold
+CopyButton.Text = "Copy Results"
+CopyButton.BackgroundColor3 = Color3.fromRGB(80, 80, 90) -- Neutral color
+CopyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+Instance.new("UICorner", CopyButton).CornerRadius = UDim.new(0, 4)
+
+local OutputFrame = Instance.new("ScrollingFrame", MainWindow)
+OutputFrame.Size = UDim2.new(1, -20, 1, -175) -- Adjusted size for new button
+OutputFrame.Position = UDim2.new(0.5, 0, 1, -10)
+OutputFrame.AnchorPoint = Vector2.new(0.5, 1)
+OutputFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+Instance.new("UICorner", OutputFrame).CornerRadius = UDim.new(0, 4)
+
+local OutputLabel = Instance.new("TextLabel", OutputFrame)
+OutputLabel.Size = UDim2.new(1, -10, 0, 0) -- Added padding
+OutputLabel.Position = UDim2.fromScale(0.01, 0)
+OutputLabel.AutomaticSize = Enum.AutomaticSize.Y
+OutputLabel.BackgroundTransparency = 1
+OutputLabel.Font = Enum.Font.Code
+OutputLabel.Text = "Analysis results will appear here..."
+OutputLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+OutputLabel.TextSize = 14
+OutputLabel.TextXAlignment = Enum.TextXAlignment.Left
+OutputLabel.TextYAlignment = Enum.TextYAlignment.Top
+
+MainWindow.Parent = DeobfuscatorGui
+DeobfuscatorGui.Parent = game:GetService("CoreGui")
+
+--//==================================================================================//--
+--// Deobfuscation & GUI Logic
+--//==================================================================================//--
+local function SetOutput(text)
+    OutputLabel.Text = text
+    task.wait()
+    OutputFrame.CanvasSize = UDim2.new(0, 0, 0, OutputLabel.TextBounds.Y + 20)
+end
+
+AnalyzeButton.MouseButton1Click:Connect(function()
+    -- (Analysis logic is unchanged)
+    local url = UrlInput.Text
+    if not url:match("https") then SetOutput("Error: Invalid URL provided."); return end
+    SetOutput("Downloading source code...")
+    local success, source = pcall(game.HttpGet, game, url, true)
+    if not success or not source then SetOutput("Error downloading source: " .. tostring(source)); return end
+    SetOutput("Source downloaded. Beginning analysis..."); task.wait(0.5)
+    local results = {"-----------[ CONSTANTS DUMP ]-----------", "-- These are all the strings found inside the script's constant table.", "-- The name of the remote event is likely hidden here."}
+    for _, str in ipairs(source:split("\n")) do
+        for captured_string in str:gmatch('"([^"]*)"') do
+            if #captured_string > 2 then table.insert(results, captured_string) end
+        end
+    end
+    table.insert(results, "\n\n-----------[ FORMATTED SOURCE (Preview) ]-----------")
+    table.insert(results, source:sub(1, 4000) .. "\n... (truncated for display)")
+    SetOutput(table.concat(results, "\n"))
+    print("[DEOBFUSCATOR] Analysis complete. Results are in the GUI.")
+end)
+
+-- [NEW] Copy Button Logic
+CopyButton.MouseButton1Click:Connect(function()
+    if not isfunction(setclipboard) then
+        warn("[DEOBFUSCATOR] Your executor does not support 'setclipboard'.")
+        CopyButton.Text = "Copy Failed: Unsupported"
+        task.wait(3)
+        CopyButton.Text = "Copy Results"
+        return
+    end
+
+    local success, err = pcall(setclipboard, OutputLabel.Text)
+    if success then
+        CopyButton.Text = "Copied!"
+        task.wait(2)
+        CopyButton.Text = "Copy Results"
+    else
+        CopyButton.Text = "Copy Failed"
+        warn("[DEOBFUSCATOR] setclipboard error:", err)
+        task.wait(2)
+        CopyButton.Text = "Copy Results"
+    end
+end)

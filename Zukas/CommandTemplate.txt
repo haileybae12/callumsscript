@@ -1,0 +1,21 @@
+--[Name of new command goes here]
+
+Modules.Example = {
+    State = {
+        Enabled = false,
+   
+        
+        
+    }
+}
+
+
+function Modules.Example
+
+
+
+RegisterCommand({
+    Name = "Example",
+    Aliases = {"AliasHere", "AliasHere"},
+    Description = "This is an example description."
+}, function(args)

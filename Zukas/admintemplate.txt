@@ -1,0 +1,493 @@
+-- Introduction Splash Screen
+(function()
+    local TweenService = game:GetService("TweenService")
+    local CoreGui = game:GetService("CoreGui")
+    local THEME = {
+        Title = "ZukaHub",
+        Subtitle = "Initializing Modules...",
+        IconAssetId = "rbxassetid://7243158473",
+        BackgroundColor = Color3.fromRGB(20, 20, 25),
+        AccentColor = Color3.fromRGB(0, 255, 255), -- Bright Cyan
+        TextColor = Color3.fromRGB(240, 240, 240),
+        FadeInTime = 0.5,
+        HoldTime = 2.0,
+        FadeOutTime = 0.7
+    }
+    local splashGui = Instance.new("ScreenGui")
+    splashGui.Name = "SplashScreen_" .. math.random(1000, 9999)
+    splashGui.ResetOnSpawn = false
+    splashGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    local background = Instance.new("Frame", splashGui)
+    background.Size = UDim2.fromScale(1, 1)
+    background.BackgroundColor3 = THEME.BackgroundColor
+    background.BackgroundTransparency = 1
+    local centerFrame = Instance.new("Frame", background)
+    centerFrame.Size = UDim2.fromOffset(200, 200)
+    centerFrame.Position = UDim2.fromScale(0.5, 0.5)
+    centerFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    centerFrame.BackgroundTransparency = 1
+    local icon = Instance.new("ImageLabel", centerFrame)
+    icon.Size = UDim2.fromScale(0.5, 0.5)
+    icon.Position = UDim2.fromScale(0.5, 0.35)
+    icon.AnchorPoint = Vector2.new(0.5, 0.5)
+    icon.BackgroundTransparency = 1
+    icon.Image = THEME.IconAssetId
+    icon.ImageColor3 = THEME.AccentColor
+    icon.ImageTransparency = 1
+    local title = Instance.new("TextLabel", centerFrame)
+    title.Size = UDim2.new(1, 0, 0.2, 0)
+    title.Position = UDim2.fromScale(0.5, 0.65)
+    title.AnchorPoint = Vector2.new(0.5, 0.5)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.GothamSemibold
+    title.Text = THEME.Title
+    title.TextColor3 = THEME.TextColor
+    title.TextSize = 24
+    title.TextTransparency = 1
+    local subtitle = Instance.new("TextLabel", centerFrame)
+    subtitle.Size = UDim2.new(1, 0, 0.1, 0)
+    subtitle.Position = UDim2.fromScale(0.5, 0.8)
+    subtitle.AnchorPoint = Vector2.new(0.5, 0.5)
+    subtitle.BackgroundTransparency = 1
+    subtitle.Font = Enum.Font.Gotham
+    subtitle.Text = THEME.Subtitle
+    subtitle.TextColor3 = THEME.TextColor
+    subtitle.TextSize = 14
+    subtitle.TextTransparency = 1
+    splashGui.Parent = CoreGui
+    local tweenInfoIn = TweenInfo.new(THEME.FadeInTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local tweenInfoOut = TweenInfo.new(THEME.FadeOutTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+    local fadeInTweens = {
+        TweenService:Create(background, tweenInfoIn, { BackgroundTransparency = 0.3 }),
+        TweenService:Create(icon, tweenInfoIn, { ImageTransparency = 0 }),
+        TweenService:Create(title, tweenInfoIn, { TextTransparency = 0 }),
+        TweenService:Create(subtitle, tweenInfoIn, { TextTransparency = 0.2 })
+    }
+    local fadeOutTweens = {
+        TweenService:Create(background, tweenInfoOut, { BackgroundTransparency = 1 }),
+        TweenService:Create(icon, tweenInfoOut, { ImageTransparency = 1 }),
+        TweenService:Create(title, tweenInfoOut, { TextTransparency = 1 }),
+        TweenService:Create(subtitle, tweenInfoOut, { TextTransparency = 1 })
+    }
+    for _, tween in ipairs(fadeInTweens) do tween:Play() end
+    task.wait(THEME.FadeInTime + THEME.HoldTime)
+    for _, tween in ipairs(fadeOutTweens) do tween:Play() end
+    fadeOutTweens[1].Completed:Wait()
+    splashGui:Destroy()
+end)()
+
+--// Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+
+--// Variables
+local LocalPlayer = Players.LocalPlayer
+local Prefix = ";"
+local Commands = {}
+local CommandInfo = {}
+local Modules = {}
+
+--// Main Functions
+function DoNotif(text, duration)
+    pcall(function()
+        local TextService = game:GetService("TextService")
+        local notifGui = CoreGui:FindFirstChild("ZukaNotifGui") or Instance.new("ScreenGui", CoreGui)
+        notifGui.Name = "ZukaNotifGui"
+        notifGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+        notifGui.ResetOnSpawn = false
+        local notif = Instance.new("TextLabel")
+        notif.Font = Enum.Font.GothamSemibold
+        notif.TextSize = 16
+        notif.Text = text
+        notif.TextWrapped = true 
+        notif.Size = UDim2.new(0, 300, 0, 0)
+        local textBounds = TextService:GetTextSize(notif.Text, notif.TextSize, notif.Font, Vector2.new(notif.Size.X.Offset, 1000))
+        local verticalPadding = 20
+        notif.Size = UDim2.new(0, 300, 0, textBounds.Y + verticalPadding)
+        notif.Position = UDim2.new(0.5, -150, 0, -60)
+        notif.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+        notif.TextColor3 = Color3.fromRGB(255, 255, 255)
+        notif.Parent = notifGui
+        Instance.new("UICorner", notif).CornerRadius = UDim.new(0, 6)
+        Instance.new("UIStroke", notif).Color = Color3.fromRGB(80, 80, 100)
+        local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+        local goal = { Position = UDim2.new(0.5, -150, 0, 10) }
+        TweenService:Create(notif, tweenInfo, goal):Play()
+        task.wait(duration or 1)
+        local tweenInfoOut = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        local goalOut = { Position = UDim2.new(0.5, -150, 0, -60) }
+        local outTween = TweenService:Create(notif, tweenInfoOut, goalOut)
+        outTween:Play()
+        outTween.Completed:Wait()
+        notif:Destroy()
+    end)
+end
+
+function RegisterCommand(info, func)
+    if not info or not info.Name or not func then
+        warn("Command registration failed: Missing info, name, or function.")
+        return
+    end
+    local name = info.Name:lower()
+    if Commands[name] then
+        warn("Command registration skipped: Command '" .. name .. "' already exists.")
+        return
+    end
+    Commands[name] = func
+    if info.Aliases then
+        for _, alias in ipairs(info.Aliases) do
+            local aliasLower = alias:lower()
+            if Commands[aliasLower] then
+                warn("Alias '" .. aliasLower .. "' for command '" .. name .. "' conflicts with an existing command and was not registered.")
+            else
+                Commands[aliasLower] = func
+            end
+        end
+    end
+    table.insert(CommandInfo, info)
+end
+
+--// Modules
+Modules.AutoComplete = {};
+function Modules.AutoComplete:GetMatches(prefix)
+    local matches = {}
+    if typeof(prefix) ~= "string" or #prefix == 0 then return matches end
+    prefix = prefix:lower()
+    for cmdName, _ in pairs(Commands) do
+        if cmdName:sub(1, #prefix) == prefix then
+            table.insert(matches, cmdName)
+        end
+    end
+    table.sort(matches)
+    return matches
+end
+
+--// REVAMPED COMMAND BAR MODULE
+Modules.CommandBar = {
+    State = {
+        UI = nil,
+        TextBox = nil,
+        SuggestionsFrame = nil,
+        KeybindConnection = nil,
+        PrefixKey = Enum.KeyCode.Semicolon,
+        IsAnimating = false,
+        IsEnabled = false
+    }
+}
+
+function Modules.CommandBar:Toggle()
+    if self.State.IsAnimating then return end
+    self.State.IsAnimating = true
+    self.State.IsEnabled = not self.State.IsEnabled
+
+    local isOpening = self.State.IsEnabled
+    local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+
+    if isOpening then
+        self.State.UI.Enabled = true
+        self.State.Container.Position = UDim2.fromScale(0.5, 0.82)
+        self.State.Container.BackgroundTransparency = 1
+        
+        TweenService:Create(self.State.Container, tweenInfo, {
+            Position = UDim2.fromScale(0.5, 0.8),
+            BackgroundTransparency = 0
+        }):Play()
+
+        self.State.TextBox:CaptureFocus()
+        self.State.IsAnimating = false
+    else
+        self.State.TextBox:ReleaseFocus()
+        self:_ClearSuggestions()
+
+        local anim = TweenService:Create(self.State.Container, tweenInfo, {
+            Position = UDim2.fromScale(0.5, 0.82),
+            BackgroundTransparency = 1
+        })
+        anim:Play()
+        anim.Completed:Connect(function()
+            self.State.UI.Enabled = false
+            self.State.IsAnimating = false
+        end)
+    end
+end
+
+function Modules.CommandBar:_ClearSuggestions()
+    if not self.State.SuggestionsFrame then return end
+    self.State.SuggestionsFrame.Visible = false
+    for _, child in ipairs(self.State.SuggestionsFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+end
+
+function Modules.CommandBar:Initialize()
+    local self = self
+    
+    local Theme = {
+        BarColor = Color3.fromRGB(22, 22, 22),
+        LineColor = Color3.fromRGB(150, 150, 150),
+        StrokeColor = Color3.fromRGB(60, 60, 60),
+        InputTextColor = Color3.fromRGB(255, 255, 255),
+        PlaceholderTextColor = Color3.fromRGB(150, 150, 150),
+        SuggestionTextColor = Color3.fromRGB(210, 210, 220),
+        SuggestionHoverColor = Color3.fromRGB(45, 45, 45),
+        MainFont = Enum.Font.Gotham
+    }
+
+    local ui = Instance.new("ScreenGui")
+    ui.Name, ui.ResetOnSpawn, ui.Enabled, ui.Parent = "CommandBarUI_Revamped", false, false, CoreGui
+    self.State.UI = ui
+
+    local container = Instance.new("Frame")
+    container.Name = "Container"
+    container.AnchorPoint = Vector2.new(0.5, 0.5)
+    container.Position = UDim2.fromScale(0.5, 0.82)
+    container.Size = UDim2.new(1, 0, 0, 38)
+    container.BackgroundTransparency = 1
+    container.Parent = ui
+    self.State.Container = container
+
+    local inputFrame = Instance.new("Frame")
+    inputFrame.Name = "InputFrame"
+    inputFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    inputFrame.Position = UDim2.fromScale(0.5, 0.5)
+    inputFrame.Size = UDim2.fromOffset(300, 38)
+    inputFrame.BackgroundColor3 = Theme.BarColor
+    inputFrame.Parent = container
+    
+    Instance.new("UICorner", inputFrame).CornerRadius = UDim.new(0, 8)
+    Instance.new("UIStroke", inputFrame).Color, Instance.new("UIStroke", inputFrame).Thickness = Theme.StrokeColor, 1.5
+
+    local textBox = Instance.new("TextBox")
+    textBox.Name = "Input"
+    textBox.Size = UDim2.new(1, -20, 1, -10)
+    textBox.Position = UDim2.fromScale(0.5, 0.5)
+    textBox.AnchorPoint = Vector2.new(0.5, 0.5)
+    textBox.BackgroundTransparency = 1
+    textBox.Font = Theme.MainFont
+    textBox.PlaceholderText = "Command Here"
+    textBox.PlaceholderColor3 = Theme.PlaceholderTextColor
+    textBox.TextColor3 = Theme.InputTextColor
+    textBox.TextSize = 16
+    textBox.ClearTextOnFocus = false
+    textBox.Parent = inputFrame
+    self.State.TextBox = textBox
+
+    local function createLine(anchor)
+        local line = Instance.new("Frame")
+        line.Name = anchor .. "Line"
+        line.AnchorPoint = Vector2.new(anchor == "Left" and 1 or 0, 0.5)
+        line.Position = UDim2.new(0.5, anchor == "Left" and -155 or 155, 0.5, 0)
+        line.Size = UDim2.new(0.2, 0, 0, 2)
+        line.BackgroundColor3 = Theme.LineColor
+        line.BorderSizePixel = 0
+        line.Parent = container
+        
+        local gradient = Instance.new("UIGradient")
+        gradient.Rotation = anchor == "Left" and 180 or 0
+        gradient.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
+        gradient.Parent = line
+    end
+    createLine("Left")
+    createLine("Right")
+    
+    local suggestionsFrame = Instance.new("ScrollingFrame")
+    suggestionsFrame.Name = "Suggestions"
+    suggestionsFrame.AnchorPoint = Vector2.new(0.5, 0)
+    suggestionsFrame.Position = UDim2.new(0.5, 0, 1, 10)
+    suggestionsFrame.Size = UDim2.new(0, 300, 0, 120)
+    suggestionsFrame.BackgroundColor3 = Theme.BarColor
+    suggestionsFrame.BorderSizePixel = 0
+    suggestionsFrame.ScrollBarThickness = 4
+    suggestionsFrame.Visible = false
+    suggestionsFrame.Parent = inputFrame
+    self.State.SuggestionsFrame = suggestionsFrame
+    Instance.new("UICorner", suggestionsFrame).CornerRadius = UDim.new(0, 6)
+    Instance.new("UIStroke", suggestionsFrame).Color = Theme.StrokeColor
+
+    local listLayout = Instance.new("UIListLayout", suggestionsFrame)
+    listLayout.Padding = UDim.new(0, 3)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.FillDirection = Enum.FillDirection.Vertical
+    listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    
+    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        suggestionsFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    end)
+    
+    self.State.IsScriptUpdatingText = false
+    local MAX_SUGGESTIONS = 6
+
+    local function createSuggestionButton(text)
+        local button = Instance.new("TextButton")
+        button.Name, button.Text, button.Parent = text, text, self.State.SuggestionsFrame
+        button.TextSize, button.Font, button.TextColor3 = 14, Theme.MainFont, Theme.SuggestionTextColor
+        button.TextXAlignment, button.BackgroundTransparency = Enum.TextXAlignment.Left, 1
+        button.Size = UDim2.new(1, -10, 0, 24)
+        
+        local tweenInfo = TweenInfo.new(0.15)
+        button.MouseEnter:Connect(function() TweenService:Create(button, tweenInfo, { BackgroundColor3 = Theme.SuggestionHoverColor, BackgroundTransparency = 0 }):Play() end)
+        button.MouseLeave:Connect(function() TweenService:Create(button, tweenInfo, { BackgroundTransparency = 1 }):Play() end)
+        
+        button.MouseButton1Click:Connect(function()
+            self.State.IsScriptUpdatingText = true
+            self.State.TextBox.Text = text .. " "
+            self.State.TextBox.CursorPosition = #self.State.TextBox.Text + 1
+            self.State.TextBox:CaptureFocus()
+            self.State.IsScriptUpdatingText = false
+            self:_ClearSuggestions()
+        end)
+        return button
+    end
+
+    local function updateSuggestions()
+        if self.State.IsScriptUpdatingText then return end
+        self:_ClearSuggestions()
+        local inputText = textBox.Text:match("^%s*(%S*)")
+        if not inputText or #inputText == 0 then return end
+        
+        local matches = Modules.AutoComplete:GetMatches(inputText)
+        if #matches > 0 then
+            suggestionsFrame.Visible = true
+            for i, match in ipairs(matches) do
+                if i > MAX_SUGGESTIONS then break end
+                createSuggestionButton(match)
+            end
+        end
+    end
+
+    textBox.Changed:Connect(function(property) if property == "Text" then updateSuggestions() end end)
+    
+    local function submitCommand()
+        if self.State.TextBox.Text:len() > 0 then
+            processCommand(Prefix .. self.State.TextBox.Text)
+            self.State.TextBox.Text = ""
+            self:Toggle()
+        end
+    end
+
+    textBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            submitCommand()
+        else
+            task.wait(0.1)
+            if self.State.IsEnabled then self:Toggle() end -- Close if focus is lost by clicking away
+        end
+    end)
+
+    textBox.Focused:Connect(updateSuggestions)
+
+    self.State.KeybindConnection = UserInputService.InputBegan:Connect(function(input, gpe)
+        if not gpe and input.KeyCode == self.State.PrefixKey then self:Toggle() end
+    end)
+end
+--// END OF REVAMPED COMMAND BAR
+
+--// Commands
+Modules.UnlockMouse = { State = { Enabled = false, Connection = nil } }
+RegisterCommand({ Name = "UnlockMouse", Aliases = {"unlockcursor", "freemouse", "um"}, Description = "Toggles a persistent loop to unlock the mouse cursor." }, function()
+    local State = Modules.UnlockMouse.State
+    State.Enabled = not State.Enabled
+    if State.Enabled then
+        if State.Connection then State.Connection:Disconnect() end
+        State.Connection = RunService.RenderStepped:Connect(function()
+            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+            UserInputService.MouseIconEnabled = true
+        end)
+        DoNotif("Mouse Unlock Enabled", 2)
+    else
+        if State.Connection then State.Connection:Disconnect(); State.Connection = nil end
+        DoNotif("Mouse Unlock Disabled", 2)
+    end
+end)
+
+Modules.ESP = { State = { IsActive = false, Connections = {}, TrackedPlayers = {} } }
+function Modules.ESP:Toggle()
+    self.State.IsActive = not self.State.IsActive
+    if self.State.IsActive then
+        local function createEspForPlayer(player)
+            if player == LocalPlayer then return end
+            local function setupVisuals(character)
+                if self.State.TrackedPlayers[player] then self.State.TrackedPlayers[player].Highlight:Destroy(); self.State.TrackedPlayers[player].Billboard:Destroy() end
+                local head = character:WaitForChild("Head", 2)
+                if not head then return end
+                local highlight = Instance.new("Highlight", character)
+                highlight.FillColor, highlight.OutlineColor = Color3.fromRGB(255, 60, 60), Color3.fromRGB(255, 255, 255)
+                highlight.FillTransparency, highlight.OutlineTransparency = 0.8, 0.3
+                local billboard = Instance.new("BillboardGui", head)
+                billboard.Adornee, billboard.AlwaysOnTop, billboard.Size = head, true, UDim2.new(0, 200, 0, 50)
+                billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+                local nameLabel = Instance.new("TextLabel", billboard)
+                nameLabel.Size, nameLabel.Text, nameLabel.BackgroundTransparency = UDim2.new(1, 0, 0.5, 0), player.Name, 1
+                nameLabel.Font, nameLabel.TextSize, nameLabel.TextColor3 = Enum.Font.Code, 18, Color3.fromRGB(255, 255, 255)
+                local teamLabel = Instance.new("TextLabel", billboard)
+                teamLabel.Size, teamLabel.Position, teamLabel.BackgroundTransparency = UDim2.new(1, 0, 0.5, 0), UDim2.new(0, 0, 0.5, 0), 1
+                teamLabel.Font, teamLabel.TextSize = Enum.Font.Code, 14
+                teamLabel.Text = player.Team and player.Team.Name or "No Team"
+                teamLabel.TextColor3 = player.Team and player.Team.TeamColor.Color or Color3.fromRGB(200, 200, 200)
+                self.State.TrackedPlayers[player] = { Highlight = highlight, Billboard = billboard }
+            end
+            if player.Character then setupVisuals(player.Character) end
+            player.CharacterAdded:Connect(setupVisuals)
+        end
+        local function removeEspForPlayer(player)
+            if self.State.TrackedPlayers[player] then
+                pcall(function() self.State.TrackedPlayers[player].Highlight:Destroy() end)
+                pcall(function() self.State.TrackedPlayers[player].Billboard:Destroy() end)
+                self.State.TrackedPlayers[player] = nil
+            end
+        end
+        for _, player in ipairs(Players:GetPlayers()) do createEspForPlayer(player) end
+        self.State.Connections.PlayerAdded = Players.PlayerAdded:Connect(createEspForPlayer)
+        self.State.Connections.PlayerRemoving = Players.PlayerRemoving:Connect(removeEspForPlayer)
+    else
+        for _, conn in pairs(self.State.Connections) do conn:Disconnect() end; self.State.Connections = {}
+        for _, data in pairs(self.State.TrackedPlayers) do pcall(function() data.Highlight:Destroy() end); pcall(function() data.Billboard:Destroy() end) end; self.State.TrackedPlayers = {}
+    end
+    DoNotif("ESP " .. (self.State.IsActive and "Enabled" or "Disabled"), 2)
+end
+RegisterCommand({Name = "esp", Aliases = {}, Description = "Toggles player ESP."}, function(args)
+    Modules.ESP:Toggle(args)
+end)
+--// New Modules and Register command lines will start here.
+
+
+
+
+
+
+--// Finalization
+function processCommand(message)
+    if not message:sub(1, #Prefix) == Prefix then return false end
+    local args = {}
+    for word in message:sub(#Prefix + 1):gmatch("%S+") do table.insert(args, word) end
+    if #args == 0 then return true end
+    local cmdName = table.remove(args, 1):lower()
+    local cmdFunc = Commands[cmdName]
+    if cmdFunc then
+        local success, err = pcall(cmdFunc, args)
+        if not success then warn("Command Error:", err); DoNotif("Error: " .. tostring(err), 5) end
+    else
+        DoNotif("Unknown command: " .. cmdName, 3)
+    end
+    return true
+end
+
+Modules.CommandBar:Initialize() -- This initializes the new bar
+
+local TextChatService
+local success = pcall(function() TextChatService = game:GetService("TextChatService") end)
+if success and TextChatService then
+    TextChatService.OnSendingMessage = function(message)
+        if processCommand(message.Text) then return nil end
+        return {}
+    end
+else
+    LocalPlayer.Chatted:Connect(processCommand)
+end
+DoNotif("ZukaHub Initialized. Press ; to open.", 3)
